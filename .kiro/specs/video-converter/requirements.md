@@ -47,11 +47,12 @@
 
 #### 验收标准
 
-1. WHEN 用户指定 AVI-MJPEG 作为输出格式 THEN Video_Converter SHALL 生成无音频的 AVI 文件，视频帧使用 MJPEG 编码
+1. WHEN 用户指定 AVI-MJPEG 作为输出格式 THEN Video_Converter SHALL 生成无音频的 AVI 文件，视频帧使用 YUV420 Baseline JPEG 编码
 2. WHEN 用户指定自定义帧率 THEN Video_Converter SHALL 按照指定帧率设置 AVI 文件的帧率元数据
 3. WHEN 用户指定 Quality_Level THEN Video_Converter SHALL 使用指定的质量值编码每帧 JPEG
 4. WHEN AVI 文件生成完成 THEN Video_Converter SHALL 依次调用 script/procAVI_no_audio_first.py 和 script/procAVI_no_audio_second.py 进行后处理
 5. WHEN 后处理完成 THEN Video_Converter SHALL 确保 AVI 文件中每个 JPEG 帧数据起始地址 8 字节对齐
+6. WHEN 编码 AVI 中的 JPEG 帧 THEN Video_Converter SHALL 确保每帧 JPEG 使用 Baseline_JPEG 编码模式（SOF0 标记）
 
 ### 需求 4
 

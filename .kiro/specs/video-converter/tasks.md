@@ -86,17 +86,22 @@
     - **Property 13: MJPEG 往返一致性**
     - **验证: 需求 2.5, 8.3**
 
-- [-] 7. AVI 写入器实现
+- [x] 7. AVI 写入器实现
+
+
+
+
 
 
   - [x] 7.1 实现 AviWriter 类
 
-    - 使用 OpenCV VideoWriter 生成 AVI 文件
+    - 使用 OpenCV VideoWriter 生成 AVI 文件（YUV420 Baseline JPEG 编码）
     - 设置 MJPEG 编码和帧率
-    - _需求: 3.1, 3.2_
+    - _需求: 3.1, 3.2, 3.6_
   - [ ]* 7.2 编写 AviWriter 属性测试
     - **Property 7: AVI-MJPEG 8 字节对齐**
-    - **验证: 需求 3.5**
+    - **Property 7a: AVI-MJPEG Baseline JPEG 编码验证**
+    - **验证: 需求 3.1, 3.5, 3.6**
 
 
 
@@ -169,6 +174,7 @@
     - 支持 `python -m video_converter` 调用
 
     - _需求: 5.1_
-  - [ ] 14.2 更新模块导出
+  - [x] 14.2 更新模块导出
+
     - 在 __init__.py 中导出公共 API
     - _需求: 6.1_

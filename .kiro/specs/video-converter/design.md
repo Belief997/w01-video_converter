@@ -229,13 +229,18 @@ class MjpegWriter:
 
 
 class AviWriter:
-    """AVI 写入器 - 生成 AVI 容器"""
+    """AVI 写入器 - 生成 AVI 容器（使用 YUV420 Baseline JPEG 编码）"""
     
     def __init__(self, output_path: str, width: int, height: int, fps: float):
         pass
     
     def write_frame(self, jpeg_data: bytes) -> None:
-        """写入 MJPEG 帧"""
+        """
+        写入 MJPEG 帧
+        
+        Args:
+            jpeg_data: YUV420 Baseline JPEG 编码的帧数据
+        """
         pass
     
     def close(self) -> None:
@@ -276,7 +281,14 @@ class PostProcessor:
     
     @staticmethod
     def process_h264(input_path: str, output_path: str, fps: float) -> None:
-        """调用 h264_pack.py 添加头部"""
+        """
+        调用 h264_pack.py 添加自定义头部
+        
+        h264_pack.py 功能：
+        - 解析 SPS 获取视频分辨率
+        - 通过 AUD 或 slice header 的 first_mb_in_slice 统计帧数
+        - 生成包含分辨率、帧数、帧时间的自定义头部
+        """
         pass
 ```
 
@@ -378,6 +390,12 @@ class MjpegFrame:
 *对于任意* 生成的 AVI-MJPEG 文件，每个 JPEG 帧数据的起始偏移量应为 8 的倍数。
 
 **验证: 需求 3.5**
+
+### 属性 7a：AVI-MJPEG Baseline JPEG 编码验证
+
+*对于任意* AVI-MJPEG 文件中的 JPEG 帧，帧数据应包含 SOF0 标记（0xFFC0），表明使用 YUV420 Baseline DCT 编码。
+
+**验证: 需求 3.1, 3.6**
 
 ### 属性 8：H264 尺寸 16 对齐
 
@@ -514,6 +532,7 @@ class PostProcessError(VideoConverterError):
 opencv-python>=4.5.0    # 视频读取和帧处理
 numpy>=1.20.0           # 数组操作
 Pillow>=8.0.0           # JPEG 编码
+bitstring>=4.0.0        # H264 比特流解析（h264_pack.py 依赖）
 hypothesis>=6.0.0       # 属性测试
 pytest>=7.0.0           # 测试框架
 ```
