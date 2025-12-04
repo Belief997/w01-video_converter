@@ -7,12 +7,20 @@ from tkinter import filedialog
 import sys
 import argparse
 
-def build_exif_app1_segment(padlen=0):
+def build_exif_app0_segment(padlen=0):
     # 构造标准APP0段 (JFIF1.01，没有缩略图)
     # Marker(2)+Len(2)+Id(5)+Ver(2)+Units(1)+Xd(2)+Yd(2)+Xth(1)+Yth(1) = 18字节
     # padlen为内容尾补零
     # JFIF相关：0xFF 0xE0 len_hi len_lo 'JFIF\0' 0x01 0x01 0x00 0x00 0x01 0x00 0x01 0x00 0x00
-    base = b'\xFF\xE1'                                   # APP0 Marker
+    base = b'\xFF\xE0'                                   # APP0 Marker
+    ex = b'JFIF' 
+    length = 6 # 长度字段包括2字节自己
+    seg = base + length.to_bytes(2, 'big') + ex 
+    return seg
+
+def build_exif_app1_segment(padlen=0):
+    # 构造标准APP1段 
+    base = b'\xFF\xE1'                                   # APP1 Marker
     ex = b'EXIF' 
     length = 6 + padlen # 长度字段包括2字节自己
     seg = base + length.to_bytes(2, 'big') + ex + (b'\0' * padlen)
@@ -26,7 +34,11 @@ def insert_app1_to_jpeg(jpeg_data, padlen):
     if jpeg_data[2:4] == b'\xFF\xE0':
         seg_len = int.from_bytes(jpeg_data[4:6], 'big')
         app0seg = jpeg_data[2:4+seg_len]
-    rest = jpeg_data[4+seg_len:]
+    else:
+        app0seg = build_exif_app0_segment(padlen)
+        seg_len = 0
+    
+    rest = jpeg_data[2+seg_len:]
     app1seg = build_exif_app1_segment(padlen)
     return soi + app0seg + app1seg + rest
 
@@ -50,6 +62,7 @@ def pad_appn(jpeg_data, padlen, pad_byte=b'\0'):
             pos += 2 + seg_len
         else:
             break
+    # print("APP1 NOT FOUND")
     return None # 没有
 
 def read_chunk_header(f, offset):
@@ -181,7 +194,7 @@ def align_avi_frames(infile, outfile, pad_byte=b'\0'):
                 new_jpeg_datas[-1] = t
                 done = True
             else:
-                # 没有，插入APP0
+                # 没有，插入APP1
                 t = insert_app1_to_jpeg(last_jpeg, need_pad)
                 new_jpeg_datas[-1] = t
                 done = True

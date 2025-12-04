@@ -98,7 +98,13 @@ class PostProcessor:
         # 第二步处理
         second_script = cls._get_script_path("procAVI_no_audio_second.py")
         
-        cls._run_script(second_script, ["-i", temp_path, "-o", output_path])
+        try:
+            cls._run_script(second_script, ["-i", temp_path, "-o", output_path])
+        except PostProcessError as e:
+            # 如果第二步失败，使用第一步的结果
+            import shutil
+            shutil.copy(temp_path, output_path)
+            print(f"警告: 第二步处理失败，使用第一步结果: {e}")
         
         # 清理临时文件
         if os.path.exists(temp_path):
