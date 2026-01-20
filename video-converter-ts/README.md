@@ -9,7 +9,8 @@
 
 - 📖 **[README.md](./README.md)** - 完整使用文档（当前文档）
 - 🚀 **[QUICK_START.md](./QUICK_START.md)** - 5 分钟快速开始
-- 🔧 **[INTEGRATION.md](./INTEGRATION.md)** - VSCode 插件集成指南
+- 🔧 **[INTEGRATION.md](./INTEGRATION.md)** - VSCode 插件集成指南（npm 包方式）
+- 📝 **[SOURCE_INTEGRATION.md](./SOURCE_INTEGRATION.md)** - 源码集成指南（无需 npm）
 - 📦 **[PUBLISH.md](./PUBLISH.md)** - npm 发布说明
 
 ## 功能特性
@@ -29,13 +30,28 @@
 
 ## 安装
 
-### 作为 npm 包安装（推荐）
+### 方式 1：作为 npm 包安装（推荐）
 
 ```bash
 npm install @belief997/video-converter
 ```
 
-### 从源码安装
+**优点：** 版本管理方便、自动更新、体积小
+
+### 方式 2：源码集成（零依赖）
+
+复制 `src/` 目录到你的项目，无需任何外部依赖。
+
+```bash
+# 复制源码文件
+cp -r video-converter-ts/src your-project/src/video-converter
+```
+
+**优点：** 零外部依赖、可自定义修改、完全控制
+
+详见 [SOURCE_INTEGRATION.md](./SOURCE_INTEGRATION.md)
+
+### 从源码构建
 
 ```bash
 cd video-converter-ts
@@ -45,12 +61,33 @@ npm run build
 
 ## 使用方法
 
-### 作为 npm 包使用（推荐）
+### 作为 npm 包使用
 
 安装后直接在代码中导入：
 
 ```typescript
 import { VideoConverter, OutputFormat } from '@belief997/video-converter';
+
+const converter = new VideoConverter();
+await converter.convert('input.mp4', 'output.avi', OutputFormat.AVI_MJPEG);
+```
+
+### 作为源码使用
+
+复制源码后直接导入：
+
+```typescript
+import { VideoConverter, OutputFormat } from './video-converter';
+
+const converter = new VideoConverter();
+await converter.convert('input.mp4', 'output.avi', OutputFormat.AVI_MJPEG);
+```
+
+### 完整示例
+
+```typescript
+import { VideoConverter, OutputFormat } from '@belief997/video-converter';
+// 或: import { VideoConverter, OutputFormat } from './video-converter';
 
 // 创建转换器实例（可选进度回调）
 const converter = new VideoConverter((current, total) => {
