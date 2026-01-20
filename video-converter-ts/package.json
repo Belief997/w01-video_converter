@@ -1,7 +1,7 @@
 {
-  "name": "video-converter-ts",
+  "name": "@belief997/video-converter",
   "version": "1.0.0",
-  "description": "Video converter with MJPEG, AVI-MJPEG, and H264 output formats",
+  "description": "Video converter with MJPEG, AVI-MJPEG, and H264 output formats. Supports 8-byte frame alignment for AVI files.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,18 +14,36 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "lint": "tsc --noEmit",
-    "start": "node dist/cli.js"
+    "start": "node dist/cli.js",
+    "prepublishOnly": "npm run build && npm test"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "keywords": [
     "video",
     "converter",
     "ffmpeg",
     "mjpeg",
     "h264",
-    "avi"
+    "avi",
+    "video-processing",
+    "frame-alignment",
+    "typescript"
   ],
-  "author": "",
+  "author": "Belief997",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Belief997/w01-video_converter.git",
+    "directory": "video-converter-ts"
+  },
+  "bugs": {
+    "url": "https://github.com/Belief997/w01-video_converter/issues"
+  },
+  "homepage": "https://github.com/Belief997/w01-video_converter#readme",
   "devDependencies": {
     "@types/node": "^20.10.0",
     "fast-check": "^3.15.0",
@@ -37,5 +55,7 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "peerDependencies": {},
+  "peerDependenciesMeta": {}
 }

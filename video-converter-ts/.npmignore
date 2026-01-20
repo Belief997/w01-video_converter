@@ -1,0 +1,35 @@
+# Source files (only publish dist/)
+src/
+tests/
+
+# Config files
+tsconfig.json
+vitest.config.ts
+.gitignore
+
+# Development files
+*.log
+*.test.ts
+*.spec.ts
+
+# Build artifacts
+*.tsbuildinfo
+
+# Test outputs
+output*.avi
+output*.mjpeg
+output*.h264
+*.pass1.avi
+*.ffmpeg.avi
+*.align.temp.avi
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
