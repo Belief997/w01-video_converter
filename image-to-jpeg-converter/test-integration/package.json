@@ -1,0 +1,15 @@
+{
+  "name": "image-converter-integration-test",
+  "version": "1.0.0",
+  "description": "Integration test for image-to-jpeg-converter library",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js",
+    "build": "echo 'No build step required for integration test'"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

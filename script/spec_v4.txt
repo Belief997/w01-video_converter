@@ -1,0 +1,62 @@
+
+feature： 
+1.支持转换图片为指定的 JPEG 格式，并添加自定义的 header，使用 ffmpeg 和 ts 语言。
+2.最终输出扩展名为 .bin。
+3.最终将以源码方式集成到其他工程。
+4.准备相关的集成和使用中文文档说明。
+
+JPEG 图片编码：
+1. Baseline ISO/IEC 10918-1 编码
+2. 选择采样系数(400, 420, 422, 444)，编码质量（数值，设置推荐默认值）等。
+
+
+自定义 header 格式：
+自定义 header 由两部分组成，gui_rgb_data_head_t 和 gui_jpeg_file_head_t，定义如下
+1. 其中 gui_rgb_data_head_t 填充 type 、w 和 h，其余为 0
+2. gui_jpeg_file_head_t 填充 size，为 jpeg 文件大小
+
+typedef struct gui_rgb_data_head
+{
+    unsigned char scan : 1;
+    unsigned char align : 1;
+    unsigned char resize: 2; 
+    unsigned char compress: 1;
+    unsigned char jpeg: 1;          // 0
+    unsigned char idu: 1;
+    unsigned char rsvd : 1;
+    char type;                      // JPEG         = 12, /* JPEG image file format */
+    short w;
+    short h;
+    char version;
+    char rsvd2;
+} gui_rgb_data_head_t;
+
+
+typedef struct gui_jpeg_file_head
+{
+    gui_rgb_data_head_t img_header;
+    uint32_t size; // jpeg file size, header not included, count from 0xffd8
+    uint32_t dummy; // for alignment issue  // zero
+    uint8_t jpeg[1024];
+
+} gui_jpeg_file_head_t;
+
+
+操作步骤：
+分步进行，首先使用 ffmpeg 将图片转换为指定采样比和指定图片质量的 JPEG 图片。再为图片起始位置添加自定义的 header.
+ffmpeg 转换命令参考：
+# 不带透明度的图片输入
+ffmpeg -i input.jpg -pix_fmt yuvj444p -q:v 2 output_444.jpg
+
+ffmpeg -i input.jpg -pix_fmt yuvj422p -q:v 10 output_422.jpg
+
+ffmpeg -i input.jpg -pix_fmt yuvj420p -q:v 5 output_420.jpg
+
+ffmpeg -i input.jpg -pix_fmt gray -q:v 20 output_gray.jpg
+
+# 带透明度的图片输入，默认使用纯黑色背景
+ffmpeg -i ac_cold.png -f lavfi -i "color=black" -filter_complex "[1:v][0:v]scale2ref[bg][fg];[bg][fg]overlay=format=auto" -c:v mjpeg -pix_fmt yuvj420p -q:v 2 -frames:v 1 out_white.jpg
+
+
+如下为参考输出的 header 部分数据：
+000c 4800 4800 0000 0507 0000 0000 0000 ffd8 ffe0 
