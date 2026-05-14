@@ -45,6 +45,8 @@ let VideoConverter: any;
 let OutputFormat: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let VideoScaler: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let VideoCropper: any;
 
 beforeAll(async () => {
   if (canRun) {
@@ -52,6 +54,7 @@ beforeAll(async () => {
     VideoConverter = mod.VideoConverter;
     OutputFormat = mod.OutputFormat;
     VideoScaler = mod.VideoScaler;
+    VideoCropper = mod.VideoCropper;
   }
 });
 
@@ -245,6 +248,125 @@ describe.skipIf(!canRun)(
       expect(data[1]).toBe(0xd8);
 
       console.log(`  缩放后 MJPEG: ${statSync(outputPath).size} 字节`);
+    });
+
+    // ── Cropping (pre-processing) tests ─────────────────────────────────
+
+    it('VideoCropper - 独立裁剪 API（居中裁剪）', async () => {
+      const cropper = new VideoCropper();
+      const outputPath = join(tmpDir, 'cropped_center.mp4');
+
+      await cropper.crop(TEST_VIDEO, outputPath, { width: 320, height: 180 });
+
+      expect(existsSync(outputPath)).toBe(true);
+      expect(statSync(outputPath).size).toBeGreaterThan(0);
+
+      const info = await new VideoConverter().getVideoInfo(outputPath);
+      expect(info.width).toBe(320);
+      expect(info.height).toBe(180);
+
+      console.log(`  裁剪 (居中 320x180): ${info.width}x${info.height}`);
+    });
+
+    it('VideoCropper - 独立裁剪 API（指定位置）', async () => {
+      const cropper = new VideoCropper();
+      const outputPath = join(tmpDir, 'cropped_offset.mp4');
+
+      await cropper.crop(TEST_VIDEO, outputPath, { width: 320, height: 180, x: 0, y: 0 });
+
+      expect(existsSync(outputPath)).toBe(true);
+      const info = await new VideoConverter().getVideoInfo(outputPath);
+      expect(info.width).toBe(320);
+      expect(info.height).toBe(180);
+
+      console.log(`  裁剪 (左上角 320x180): ${info.width}x${info.height}`);
+    });
+
+    it('convert - 使用 preprocess 裁剪后转换为 AVI-MJPEG', async () => {
+      const converter = new VideoConverter();
+      const outputPath = join(tmpDir, 'output_cropped.avi');
+
+      const result = await converter.convert(TEST_VIDEO, outputPath, OutputFormat.AVI_MJPEG, {
+        quality: 5,
+        preprocess: [{ type: 'crop', options: { width: 320, height: 180 } }],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.inputPath).toBe(TEST_VIDEO);
+      expect(existsSync(outputPath)).toBe(true);
+
+      const data = readFileSync(outputPath);
+      expect(data.subarray(0, 4).toString('ascii')).toBe('RIFF');
+
+      const info = await converter.getVideoInfo(outputPath);
+      expect(info.width).toBe(320);
+      expect(info.height).toBe(180);
+
+      console.log(`  裁剪后 AVI-MJPEG: ${info.width}x${info.height}, ${statSync(outputPath).size} 字节`);
+    });
+
+    it('convert - 先缩放再裁剪（preprocess pipeline）', async () => {
+      const converter = new VideoConverter();
+      const outputPath = join(tmpDir, 'output_scale_crop.avi');
+
+      const result = await converter.convert(TEST_VIDEO, outputPath, OutputFormat.AVI_MJPEG, {
+        quality: 5,
+        preprocess: [
+          { type: 'scale', options: { width: 640 } },
+          { type: 'crop',  options: { width: 320, height: 180 } },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.inputPath).toBe(TEST_VIDEO);
+      expect(existsSync(outputPath)).toBe(true);
+
+      const info = await converter.getVideoInfo(outputPath);
+      expect(info.width).toBe(320);
+      expect(info.height).toBe(180);
+
+      console.log(`  先缩放再裁剪 AVI-MJPEG: ${info.width}x${info.height}`);
+    });
+
+    it('convert - 先裁剪再缩放（preprocess pipeline 反序）', async () => {
+      const converter = new VideoConverter();
+      const outputPath = join(tmpDir, 'output_crop_scale.avi');
+
+      const result = await converter.convert(TEST_VIDEO, outputPath, OutputFormat.AVI_MJPEG, {
+        quality: 5,
+        preprocess: [
+          { type: 'crop',  options: { width: 320, height: 180 } },
+          { type: 'scale', options: { width: 160 } },
+        ],
+      });
+
+      expect(result.success).toBe(true);
+      expect(existsSync(outputPath)).toBe(true);
+
+      const info = await converter.getVideoInfo(outputPath);
+      expect(info.width).toBe(160);
+
+      console.log(`  先裁剪再缩放 AVI-MJPEG: ${info.width}x${info.height}`);
+    });
+
+    it('convert - preprocess 优先于 scale 字段', async () => {
+      const converter = new VideoConverter();
+      const outputPath = join(tmpDir, 'output_preprocess_priority.avi');
+
+      // preprocess should take precedence over scale
+      const result = await converter.convert(TEST_VIDEO, outputPath, OutputFormat.AVI_MJPEG, {
+        quality: 5,
+        scale: { width: 640 },                                          // should be ignored
+        preprocess: [{ type: 'crop', options: { width: 320, height: 180 } }],
+      });
+
+      expect(result.success).toBe(true);
+      const info = await converter.getVideoInfo(outputPath);
+      // If preprocess wins: 320x180 (crop); if scale wins: 640 wide
+      expect(info.width).toBe(320);
+      expect(info.height).toBe(180);
+
+      console.log(`  preprocess 优先: ${info.width}x${info.height}`);
     });
   }
 );

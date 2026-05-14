@@ -17,6 +17,10 @@
  *   - birds_scaled_w1280.mp4      → 放大：宽度 1280px，高度自动保持宽高比
  *   - birds_scaled_1920x1080.mp4  → 放大：精确 1920×1080
  *
+ *   [VideoCropper 独立裁剪]
+ *   - birds_cropped_center.mp4    → 居中裁剪 320×180（FFmpeg 自动计算偏移）
+ *   - birds_cropped_offset.mp4    → 从左上角(0,0)裁剪 320×180
+ *
  *   [VideoConverter 转换（原始尺寸）]
  *   - birds.avi                   → AVI-MJPEG，默认质量
  *   - birds_hq.avi                → AVI-MJPEG，高质量（q=1）
@@ -24,22 +28,28 @@
  *   - birds.mjpeg                 → MJPEG 裸流
  *   - birds.h264                  → H264 + 自定义 32 字节头
  *
- *   [VideoConverter 转换（缩放后）]
+ *   [VideoConverter 转换（缩放后，scale 字段向后兼容）]
  *   - birds_scaled_w320.avi       → 缩小 320px 宽，再转 AVI-MJPEG
  *   - birds_scaled_320x240.avi    → 缩小至 320×240，再转 AVI-MJPEG
  *   - birds_scaled_w320.mjpeg     → 缩小 320px 宽，再转 MJPEG 裸流
  *   - birds_scaled_w320.h264      → 缩小 320px 宽，再转 H264
  *   - birds_scaled_w1280.avi      → 放大 1280px 宽，再转 AVI-MJPEG
  *
+ *   [VideoConverter 转换（preprocess pipeline）]
+ *   - birds_crop320x180.avi       → 仅裁剪 320×180，再转 AVI-MJPEG
+ *   - birds_scale_crop.avi        → 先缩放到 400px 宽，再裁剪 320×180，转 AVI-MJPEG
+ *   - birds_crop_scale.avi        → 先裁剪 320×180，再缩放到 160px 宽，转 AVI-MJPEG
+ *
  * 验证方法（运行结束后）：
  *   ffplay  test-output/birds.avi                  # 原始 AVI 播放
  *   ffplay  test-output/birds_scaled_w320.avi      # 缩小后 AVI（分辨率应更小）
- *   ffplay  test-output/birds_scaled_w1280.avi     # 放大后 AVI（分辨率应更大）
+ *   ffplay  test-output/birds_crop320x180.avi      # 裁剪后 AVI
+ *   ffplay  test-output/birds_scale_crop.avi       # 先缩放再裁剪后 AVI
  *   ffprobe test-output/birds_scaled_w1280.mp4     # 检查放大后分辨率
- *   ffprobe test-output/birds_scaled_1920x1080.mp4 # 检查放大精确尺寸
+ *   ffprobe test-output/birds_cropped_center.mp4   # 检查居中裁剪分辨率
  */
 
-import { VideoConverter, VideoScaler, OutputFormat } from '../../dist/index.js';
+import { VideoConverter, VideoScaler, VideoCropper, OutputFormat } from '../../dist/index.js';
 import { existsSync, mkdirSync, statSync } from 'fs';
 import { join, dirname, basename, extname } from 'path';
 import { fileURLToPath } from 'url';
@@ -151,7 +161,45 @@ async function runScalerTasks() {
   return scalerResults;
 }
 
-// ─── 转换任务列表 ─────────────────────────────────────────────────────────
+// ─── 独立裁剪任务（VideoCropper 单独 API）─────────────────────────────────
+async function runCropperTasks() {
+  console.log('');
+  console.log('✂️   VideoCropper 独立裁剪测试');
+  printSep();
+
+  const cropperTasks = [
+    {
+      label: '居中裁剪 320×180（FFmpeg 自动计算偏移）',
+      outputFile: `${inputName}_cropped_center.mp4`,
+      options: { width: 320, height: 180 },
+    },
+    {
+      label: '左上角(0,0)裁剪 320×180',
+      outputFile: `${inputName}_cropped_offset.mp4`,
+      options: { width: 320, height: 180, x: 0, y: 0 },
+    },
+  ];
+
+  const cropperResults = [];
+  for (const task of cropperTasks) {
+    const outputPath = join(OUTPUT_DIR, task.outputFile);
+    process.stdout.write(`  ⏳ ${task.label} ...`);
+    const start = Date.now();
+    try {
+      const cropper = new VideoCropper((c, t) => {});
+      await cropper.crop(inputPath, outputPath, task.options);
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      const size = existsSync(outputPath) ? statSync(outputPath).size : 0;
+      console.log(`  ✅ 完成 (${elapsed}s, ${formatBytes(size)})`);
+      cropperResults.push({ label: task.label, file: task.outputFile, success: true, size, elapsed });
+    } catch (err) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      console.log(`  ❌ 失败 (${elapsed}s): ${err.message}`);
+      cropperResults.push({ label: task.label, file: task.outputFile, success: false, error: err.message });
+    }
+  }
+  return cropperResults;
+}
 const tasks = [
   {
     label: 'AVI-MJPEG（默认质量）',
@@ -214,6 +262,35 @@ const tasks = [
     format: OutputFormat.AVI_MJPEG,
     options: { scale: { width: 1280 } },
   },
+  // ── Preprocess pipeline tasks ──────────────────────────────────────────
+  {
+    label: 'AVI-MJPEG（仅裁剪 320×180，preprocess 单步）',
+    outputFile: `${inputName}_crop320x180.avi`,
+    format: OutputFormat.AVI_MJPEG,
+    options: { preprocess: [{ type: 'crop', options: { width: 320, height: 180 } }] },
+  },
+  {
+    label: 'AVI-MJPEG（先缩放 400px 宽，再裁剪 320×180）',
+    outputFile: `${inputName}_scale_crop.avi`,
+    format: OutputFormat.AVI_MJPEG,
+    options: {
+      preprocess: [
+        { type: 'scale', options: { width: 400 } },
+        { type: 'crop',  options: { width: 320, height: 180 } },
+      ],
+    },
+  },
+  {
+    label: 'AVI-MJPEG（先裁剪 320×180，再缩放 160px 宽）',
+    outputFile: `${inputName}_crop_scale.avi`,
+    format: OutputFormat.AVI_MJPEG,
+    options: {
+      preprocess: [
+        { type: 'crop',  options: { width: 320, height: 180 } },
+        { type: 'scale', options: { width: 160 } },
+      ],
+    },
+  },
 ];
 
 // ─── 主流程 ───────────────────────────────────────────────────────────────
@@ -230,9 +307,12 @@ console.log(`输入大小: ${formatBytes(inputSize)}`);
 // Run standalone scaler tasks first
 const scalerResults = await runScalerTasks();
 
+// Run standalone cropper tasks
+const cropperResults = await runCropperTasks();
+
 // ─── 转换任务 ─────────────────────────────────────────────────────────────
 console.log('');
-console.log('🔄  视频转换测试（含 scale+convert 组合任务）');
+console.log('🔄  视频转换测试（含 scale/crop preprocess 组合任务）');
 printSep();
 
 const results = [];
@@ -275,14 +355,21 @@ console.log('  [缩放器]');
 for (const r of scalerResults) {
   const status = r.success ? '✅' : '❌';
   const detail = r.success ? `${formatBytes(r.size)} (${r.elapsed}s)` : r.error;
-  console.log(`  ${status} ${r.file.padEnd(35)} ${detail}`);
+  console.log(`  ${status} ${r.file.padEnd(40)} ${detail}`);
+}
+console.log('');
+console.log('  [裁剪器]');
+for (const r of cropperResults) {
+  const status = r.success ? '✅' : '❌';
+  const detail = r.success ? `${formatBytes(r.size)} (${r.elapsed}s)` : r.error;
+  console.log(`  ${status} ${r.file.padEnd(40)} ${detail}`);
 }
 console.log('');
 console.log('  [转换器]');
 for (const r of results) {
   const status = r.success ? '✅' : '❌';
   const detail = r.success ? `${formatBytes(r.size)} (${r.elapsed}s)` : r.error;
-  console.log(`  ${status} ${r.file.padEnd(35)} ${detail}`);
+  console.log(`  ${status} ${r.file.padEnd(40)} ${detail}`);
 }
 printSep();
 
@@ -291,12 +378,15 @@ console.log('🔍  请在以下目录中手动验证输出:');
 console.log(`   ${OUTPUT_DIR}`);
 console.log('');
 console.log('   验证方法:');
-console.log('   ffplay  test-output/birds.avi               # AVI 播放');
-console.log('   ffplay  test-output/birds_scaled_w320.avi   # 缩放后 AVI 播放');
-console.log('   ffprobe test-output/birds_scaled_w320.mp4   # 检查缩放后分辨率');
-console.log('   ffprobe test-output/birds_scaled_w320.avi   # 检查缩放+转换后分辨率');
+console.log('   ffplay  test-output/birds.avi                  # AVI 播放');
+console.log('   ffplay  test-output/birds_scaled_w320.avi      # 缩放后 AVI 播放');
+console.log('   ffplay  test-output/birds_crop320x180.avi      # 裁剪后 AVI 播放');
+console.log('   ffplay  test-output/birds_scale_crop.avi       # 先缩放再裁剪 AVI 播放');
+console.log('   ffprobe test-output/birds_scaled_w320.mp4      # 检查缩放后分辨率');
+console.log('   ffprobe test-output/birds_cropped_center.mp4   # 检查居中裁剪分辨率');
+console.log('   ffprobe test-output/birds_scaled_w320.avi      # 检查缩放+转换后分辨率');
 console.log('');
 
-const allResults = [...scalerResults, ...results];
+const allResults = [...scalerResults, ...cropperResults, ...results];
 const failed = allResults.filter(r => !r.success).length;
 process.exit(failed > 0 ? 1 : 0);

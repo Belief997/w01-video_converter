@@ -17,15 +17,16 @@
 
 ```
 your-project/src/video-converter/
-├── converter.ts          # 主转换器（VideoConverter 类，含缩放预处理）
-├── parser.ts             # 视频信息解析（供 VideoConverter 和 VideoScaler 内部使用）
-├── ffmpeg-builder.ts     # FFmpeg 命令构建（含 buildScaleCmd，供两个类使用）
-├── ffmpeg-executor.ts    # FFmpeg 执行器（供两个类使用）
-├── models.ts             # 所有类型：VideoInfo、ConversionOptions、ConversionResult、ScaleOptions、OutputFormat、ProgressCallback
+├── converter.ts          # 主转换器（VideoConverter 类，含预处理 pipeline）
+├── parser.ts             # 视频信息解析（供多个类使用）
+├── ffmpeg-builder.ts     # FFmpeg 命令构建（buildScaleCmd、buildCropCmd 等）
+├── ffmpeg-executor.ts    # FFmpeg 执行器
+├── models.ts             # 所有类型：VideoInfo、ConversionOptions、ConversionResult、ScaleOptions、CropOptions、PreprocessStep、OutputFormat、ProgressCallback
 ├── errors.ts             # 错误类：VideoConverterError、VideoFormatError、FFmpegNotFoundError、FFmpegError、PostProcessError
 ├── index.ts              # 重导出全部公共 API
 ├── preprocess/
-│   ├── video-scaler.ts   # 独立缩放器（VideoScaler 类，与 VideoConverter 完全解耦）
+│   ├── video-scaler.ts   # 独立缩放器（VideoScaler 类）
+│   ├── video-cropper.ts  # 独立裁剪器（VideoCropper 类）
 │   └── index.ts          # preprocess 导出入口
 └── postprocess/
     ├── avi-aligner.ts    # AVI 8字节对齐后处理
@@ -34,7 +35,7 @@ your-project/src/video-converter/
     └── index.ts          # postprocess 导出入口
 ```
 
-> **注意：** `preprocess/` 目录是 1.1.0 新增的，务必一并复制。
+> **注意：** `preprocess/` 目录含 VideoScaler（v1.1.0）和 VideoCropper（v1.2.0），务必完整复制。
 
 ---
 
@@ -119,12 +120,26 @@ interface ScaleOptions {
   // 两者均提供时为精确尺寸（可能改变宽高比）
 }
 
+// 裁剪参数（width 和 height 均为必填正整数）
+interface CropOptions {
+  width: number;    // 裁剪区域宽度（正整数）
+  height: number;   // 裁剪区域高度（正整数）
+  x?: number;       // 裁剪区域左上角 X 偏移（非负整数；省略时 FFmpeg 自动居中）
+  y?: number;       // 裁剪区域左上角 Y 偏移（非负整数；省略时 FFmpeg 自动居中）
+}
+
+// 预处理步骤（有序 pipeline 中的单个步骤）
+type PreprocessStep =
+  | { type: 'scale'; options: ScaleOptions }
+  | { type: 'crop';  options: CropOptions  };
+
 // 转换选项
 interface ConversionOptions {
-  frameRate?: number;      // 目标帧率（默认保持原帧率）
-  quality?: number;        // MJPEG 质量 1-31（越小越好）；H264 CRF 0-51（越小越好）
-  debug?: boolean;         // 默认 false；true 时保留缩放中间文件（.pre-scaled.mp4）
-  scale?: ScaleOptions;    // 转换前先进行缩放预处理
+  frameRate?: number;           // 目标帧率（默认保持原帧率）
+  quality?: number;             // MJPEG 质量 1-31（越小越好）；H264 CRF 0-51（越小越好）
+  debug?: boolean;              // 默认 false；true 时保留所有预处理中间文件
+  preprocess?: PreprocessStep[]; // 有序预处理 pipeline（优先级高于 scale）
+  scale?: ScaleOptions;         // v1.1 缩放简写，等价于 preprocess: [{ type: 'scale', options }]
 }
 
 // 视频信息
@@ -170,8 +185,10 @@ class VideoConverter {
 
   /**
    * 转换视频。
-   * 若 options.scale 存在，内部流程：缩放 → 转换 → 清理临时文件（finally 块）。
-   * debug: true 时临时文件保存为 <output-basename>.pre-scaled.mp4，不清理。
+   * 若 options.preprocess 存在，按顺序执行每个预处理步骤（缩放/裁剪），
+   * 上一步输出作为下一步输入；最终结果进入转换流程。
+   * 若仅 options.scale 存在，等价于 preprocess: [{ type:'scale', options:scale }]。
+   * debug: true 时所有中间文件保存为 <output-basename>.pre-<N>-<type>.mp4，不清理。
    */
   convert(
     inputPath: string,
@@ -188,7 +205,7 @@ class VideoConverter {
 
 ```typescript
 class VideoScaler {
-  constructor()
+  constructor(onProgress?: ProgressCallback)
 
   /**
    * 缩放视频。
@@ -200,6 +217,28 @@ class VideoScaler {
     inputPath: string,
     outputPath: string,
     options: ScaleOptions
+  ): Promise<void>
+}
+```
+
+### VideoCropper 类
+
+`VideoCropper` 与 `VideoConverter` 完全解耦，内部自带独立的 FFmpegBuilder、FFmpegExecutor、VideoParser。
+
+```typescript
+class VideoCropper {
+  constructor(onProgress?: ProgressCallback)
+
+  /**
+   * 裁剪视频。
+   * 裁剪命令：ffmpeg -vf crop=W:H[:X:Y] -c:v libx264 -crf 18 -preset fast
+   * 省略 x/y 时 FFmpeg 自动居中裁剪区域。
+   * @throws VideoConverterError 若 width/height 非正整数，或 x/y 为负数/非整数
+   */
+  crop(
+    inputPath: string,
+    outputPath: string,
+    options: CropOptions
   ): Promise<void>
 }
 ```
@@ -263,12 +302,12 @@ console.log(`时长: ${info.duration.toFixed(2)} 秒`);
 console.log(`编码: ${info.codec}`);
 ```
 
-### 带缩放的转换（集成方式）
+### 带缩放的转换（scale 简写，向后兼容）
 
 转换器内部自动完成：**缩放 → 转换 → 清理临时文件**。
 
 ```typescript
-import { VideoConverter, OutputFormat, ConversionOptions } from './video-converter';
+import { VideoConverter, OutputFormat } from './video-converter';
 
 const converter = new VideoConverter();
 
@@ -283,6 +322,35 @@ const result = await converter.convert(
 // 精确指定宽高
 await converter.convert('input.mp4', 'output.mjpeg', OutputFormat.MJPEG, {
   scale: { width: 640, height: 360 }
+});
+```
+
+### 使用 preprocess pipeline（推荐）
+
+```typescript
+import { VideoConverter, OutputFormat } from './video-converter';
+
+const converter = new VideoConverter();
+
+// 仅裁剪后转换
+await converter.convert('input.mp4', 'output.avi', OutputFormat.AVI_MJPEG, {
+  preprocess: [{ type: 'crop', options: { width: 640, height: 360 } }]
+});
+
+// 先缩放，再裁剪，再转换（多步 pipeline）
+await converter.convert('input.mp4', 'output.avi', OutputFormat.AVI_MJPEG, {
+  preprocess: [
+    { type: 'scale', options: { width: 1280 } },
+    { type: 'crop',  options: { width: 640, height: 360 } },
+  ]
+});
+
+// 先裁剪，再缩放，再转换（顺序反过来）
+await converter.convert('input.mp4', 'output.avi', OutputFormat.AVI_MJPEG, {
+  preprocess: [
+    { type: 'crop',  options: { width: 640, height: 360 } },
+    { type: 'scale', options: { width: 320 } },
+  ]
 });
 ```
 
@@ -303,6 +371,23 @@ await scaler.scale('input.mp4', 'scaled_h360.mp4', { height: 360 });
 await scaler.scale('input.mp4', 'scaled_exact.mp4', { width: 640, height: 360 });
 ```
 
+### 独立使用 VideoCropper
+
+```typescript
+import { VideoCropper } from './video-converter';
+
+const cropper = new VideoCropper();
+
+// 居中裁剪 640×360（省略 x/y，FFmpeg 自动计算偏移）
+await cropper.crop('input.mp4', 'cropped_center.mp4', { width: 640, height: 360 });
+
+// 从左上角(0, 0)裁剪 640×360
+await cropper.crop('input.mp4', 'cropped_offset.mp4', { width: 640, height: 360, x: 0, y: 0 });
+
+// 指定 x 偏移，y 方向自动居中
+await cropper.crop('input.mp4', 'cropped_x.mp4', { width: 640, height: 360, x: 100 });
+```
+
 ### 调试模式
 
 ```typescript
@@ -310,12 +395,15 @@ import { VideoConverter, OutputFormat } from './video-converter';
 
 const converter = new VideoConverter();
 
-// debug: true 时，缩放临时文件保存为 output.pre-scaled.mp4，不自动清理
+// debug: true 时，所有预处理中间文件保留，命名格式：output.pre-1-scale.mp4、output.pre-2-crop.mp4
 await converter.convert('input.mp4', 'output.avi', OutputFormat.AVI_MJPEG, {
-  scale: { width: 320 },
+  preprocess: [
+    { type: 'scale', options: { width: 640 } },
+    { type: 'crop',  options: { width: 320, height: 180 } },
+  ],
   debug: true
 });
-// 转换后会保留 output.pre-scaled.mp4 供排查
+// 转换后会保留 output.pre-1-scale.mp4 和 output.pre-2-crop.mp4 供排查
 ```
 
 ### 错误处理
@@ -385,6 +473,7 @@ try {
 - [ ] 配置 `tsconfig.json`（module、moduleResolution、types）
 - [ ] 验证 FFmpeg 已安装：`ffmpeg -version`
 - [ ] 测试基本转换功能
+- [ ] 测试 preprocess pipeline（缩放、裁剪、组合步骤）
 - [ ] 测试错误处理（如传入不存在的文件）
 - [ ] 将源码文件加入版本控制
 

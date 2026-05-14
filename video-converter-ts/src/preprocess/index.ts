@@ -7,3 +7,4 @@
  */
 
 export { VideoScaler } from './video-scaler.js';
+export { VideoCropper } from './video-cropper.js';

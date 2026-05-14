@@ -189,4 +189,55 @@ describe('FFmpegBuilder', () => {
       expect(cmd[cmd.length - 1]).toBe('/output/scaled.mp4');
     });
   });
+
+  describe('buildCropCmd', () => {
+    it('should build crop command with centered crop (no x/y)', () => {
+      const cmd = builder.buildCropCmd('/input/video.mp4', '/output/cropped.mp4', { width: 640, height: 360 });
+
+      expect(cmd[0]).toBe('ffmpeg');
+      expect(cmd).toContain('-i');
+      expect(cmd).toContain('/input/video.mp4');
+      expect(cmd).toContain('-vf');
+      const vfIdx = cmd.indexOf('-vf');
+      expect(cmd[vfIdx + 1]).toBe('crop=640:360');
+      expect(cmd[cmd.length - 1]).toBe('/output/cropped.mp4');
+    });
+
+    it('should build crop command with explicit x and y', () => {
+      const cmd = builder.buildCropCmd('/input/video.mp4', '/output/cropped.mp4', { width: 640, height: 360, x: 100, y: 50 });
+
+      const vfIdx = cmd.indexOf('-vf');
+      expect(cmd[vfIdx + 1]).toBe('crop=640:360:100:50');
+    });
+
+    it('should build crop command with only x provided (y auto-centered)', () => {
+      const cmd = builder.buildCropCmd('/input/video.mp4', '/output/cropped.mp4', { width: 640, height: 360, x: 100 });
+
+      const vfIdx = cmd.indexOf('-vf');
+      expect(cmd[vfIdx + 1]).toBe('crop=640:360:100:(in_h-360)/2');
+    });
+
+    it('should build crop command with only y provided (x auto-centered)', () => {
+      const cmd = builder.buildCropCmd('/input/video.mp4', '/output/cropped.mp4', { width: 640, height: 360, y: 50 });
+
+      const vfIdx = cmd.indexOf('-vf');
+      expect(cmd[vfIdx + 1]).toBe('crop=640:360:(in_w-640)/2:50');
+    });
+
+    it('should use libx264 codec with CRF 18 and fast preset', () => {
+      const cmd = builder.buildCropCmd('/input/video.mp4', '/output/cropped.mp4', { width: 640, height: 360 });
+
+      expect(cmd).toContain('-c:v');
+      expect(cmd[cmd.indexOf('-c:v') + 1]).toBe('libx264');
+      expect(cmd).toContain('-crf');
+      expect(cmd[cmd.indexOf('-crf') + 1]).toBe('18');
+      expect(cmd).toContain('-preset');
+      expect(cmd[cmd.indexOf('-preset') + 1]).toBe('fast');
+    });
+
+    it('should set crop output as last argument', () => {
+      const cmd = builder.buildCropCmd('/input/video.mp4', '/output/cropped.mp4', { width: 320, height: 180 });
+      expect(cmd[cmd.length - 1]).toBe('/output/cropped.mp4');
+    });
+  });
 });
