@@ -35,7 +35,8 @@ export {
   VideoInfo,
   ConversionResult,
   ProgressCallback,
-  ConversionOptions
+  ConversionOptions,
+  ScaleOptions
 } from './models.js';
 
 // Error classes
@@ -56,3 +57,6 @@ export { FFmpegExecutor } from './ffmpeg-executor.js';
 
 // Post-processors (for advanced usage)
 export { MjpegPacker, AviAligner, H264Packer, BitReader } from './postprocess/index.js';
+
+// Pre-processors (for advanced usage)
+export { VideoScaler } from './preprocess/index.js';

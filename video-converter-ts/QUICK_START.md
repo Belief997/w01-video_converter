@@ -1,27 +1,37 @@
 # 快速开始 - 5 分钟集成指南
 
-## 1. 安装 (30 秒)
+## 1. 复制源码（30 秒）
+
+将 `src/` 目录复制到你的项目：
 
 ```bash
-npm install @belief997/video-converter
+# Linux/Mac
+cp -r video-converter-ts/src/ your-project/src/video-converter/
+
+# Windows
+xcopy /E video-converter-ts\src\ your-project\src\video-converter\
 ```
 
-## 2. 导入 (10 秒)
+> 确保包含 `preprocess/` 和 `postprocess/` 子目录。`cli.ts` 不需要复制。
+
+## 2. 导入（10 秒）
 
 ```typescript
-import { VideoConverter, OutputFormat } from '@belief997/video-converter';
+import { VideoConverter, VideoScaler, OutputFormat } from './video-converter';
 ```
 
-## 3. 使用 (3 分钟)
+## 3. 使用（3 分钟）
 
 ### 最简单的例子
 
 ```typescript
+import { VideoConverter, OutputFormat } from './video-converter';
+
 const converter = new VideoConverter();
 
 await converter.convert(
-  'input.mp4',      // 输入文件
-  'output.avi',     // 输出文件
+  'input.mp4',            // 输入文件
+  'output.avi',           // 输出文件
   OutputFormat.AVI_MJPEG  // 格式
 );
 ```
@@ -36,7 +46,7 @@ const converter = new VideoConverter((current, total) => {
 await converter.convert('input.mp4', 'output.avi', OutputFormat.AVI_MJPEG);
 ```
 
-### 完整选项
+### 转换前缩放
 
 ```typescript
 const converter = new VideoConverter();
@@ -46,13 +56,31 @@ const result = await converter.convert(
   'output.avi',
   OutputFormat.AVI_MJPEG,
   {
-    frameRate: 25,   // 可选：目标帧率
-    quality: 2,      // 可选：质量 (1-31)
-    debug: false     // 可选：调试模式
+    frameRate: 25,          // 可选：目标帧率
+    quality: 2,             // 可选：质量 (MJPEG: 1-31)
+    scale: { width: 640 },  // 可选：先缩放至 640px 宽，高度自动保持宽高比
+    debug: false            // 可选：调试模式（保留中间文件）
   }
 );
 
 console.log('转换完成:', result);
+```
+
+### 独立缩放（不转换格式）
+
+```typescript
+import { VideoScaler } from './video-converter';
+
+const scaler = new VideoScaler();
+
+// 仅指定宽度，高度自动保持宽高比
+await scaler.scale('input.mp4', 'scaled.mp4', { width: 640 });
+
+// 仅指定高度，宽度自动保持宽高比
+await scaler.scale('input.mp4', 'scaled.mp4', { height: 360 });
+
+// 精确指定宽高
+await scaler.scale('input.mp4', 'scaled.mp4', { width: 640, height: 360 });
 ```
 
 ## 4. 输出格式
@@ -66,10 +94,21 @@ console.log('转换完成:', result);
 ## 5. 错误处理
 
 ```typescript
+import {
+  VideoConverter,
+  OutputFormat,
+  FFmpegNotFoundError,
+  FFmpegError
+} from './video-converter';
+
 try {
   await converter.convert('input.mp4', 'output.avi', OutputFormat.AVI_MJPEG);
 } catch (error) {
-  console.error('转换失败:', error.message);
+  if (error instanceof FFmpegNotFoundError) {
+    console.error('FFmpeg 未安装，请先安装 FFmpeg');
+  } else {
+    console.error('转换失败:', (error as Error).message);
+  }
 }
 ```
 
@@ -80,58 +119,45 @@ const info = await converter.getVideoInfo('input.mp4');
 
 console.log(`分辨率: ${info.width}x${info.height}`);
 console.log(`帧率: ${info.frameRate} fps`);
-console.log(`时长: ${info.duration} 秒`);
+console.log(`时长: ${info.duration.toFixed(2)} 秒`);
+console.log(`总帧数: ${info.frameCount}`);
 ```
 
-## 完整 API
+## 完整 API 导入
 
 ```typescript
-// 导入所有类型
 import {
   VideoConverter,      // 转换器类
+  VideoScaler,         // 独立缩放器类
   OutputFormat,        // 格式枚举
   VideoInfo,           // 视频信息类型
   ConversionResult,    // 转换结果类型
-  ConversionOptions    // 转换选项类型
-} from '@belief997/video-converter';
-
-// 创建转换器
-const converter = new VideoConverter(
-  (current, total) => {
-    // 可选的进度回调
-  }
-);
-
-// 获取视频信息
-const info: VideoInfo = await converter.getVideoInfo(inputPath);
-
-// 转换视频
-const result: ConversionResult = await converter.convert(
-  inputPath,
-  outputPath,
-  format,
-  options  // 可选
-);
+  ConversionOptions,   // 转换选项类型（含 scale 字段）
+  ScaleOptions,        // 缩放参数类型 { width?, height? }
+  ProgressCallback,    // 进度回调类型
+  VideoConverterError,
+  FFmpegNotFoundError,
+  FFmpegError,
+  VideoFormatError,
+  PostProcessError
+} from './video-converter';
 ```
 
 ## 系统要求
 
 - ✅ Node.js 18+
 - ✅ FFmpeg（必须在 PATH 中）
+- ✅ TypeScript 5.0+（devDependency）
+- ✅ @types/node（devDependency）
 
-检查 FFmpeg：
+验证 FFmpeg：
 ```bash
 ffmpeg -version
 ```
 
 ## 下一步
 
-- 📖 完整文档: [README.md](./README.md)
+- 📖 项目说明: [README.md](./README.md)
 - 🔧 集成指南: [INTEGRATION.md](./INTEGRATION.md)
-- 📦 发布说明: [PUBLISH.md](./PUBLISH.md)
-- 🌐 npm 主页: https://www.npmjs.com/package/@belief997/video-converter
-
-## 需要帮助？
-
-- GitHub Issues: https://github.com/Belief997/w01-video_converter/issues
-- npm 包: https://www.npmjs.com/package/@belief997/video-converter
+- 📝 完整 API 参考: [SOURCE_INTEGRATION.md](./SOURCE_INTEGRATION.md)
+- 🐛 问题反馈: https://github.com/Belief997/w01-video_converter/issues

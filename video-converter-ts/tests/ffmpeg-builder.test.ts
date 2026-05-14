@@ -137,4 +137,56 @@ describe('FFmpegBuilder', () => {
       expect(x264Params).toContain('aq-mode=1');
     });
   });
+
+  describe('buildScaleCmd', () => {
+    it('should build scale command with only width (auto height)', () => {
+      const cmd = builder.buildScaleCmd('/input/video.mp4', '/output/scaled.mp4', { width: 1280 });
+
+      expect(cmd[0]).toBe('ffmpeg');
+      expect(cmd).toContain('-i');
+      expect(cmd).toContain('/input/video.mp4');
+      expect(cmd).toContain('-vf');
+      const vfIdx = cmd.indexOf('-vf');
+      expect(cmd[vfIdx + 1]).toBe('scale=1280:-2');
+      expect(cmd[cmd.length - 1]).toBe('/output/scaled.mp4');
+    });
+
+    it('should build scale command with only height (auto width)', () => {
+      const cmd = builder.buildScaleCmd('/input/video.mp4', '/output/scaled.mp4', { height: 720 });
+
+      const vfIdx = cmd.indexOf('-vf');
+      expect(cmd[vfIdx + 1]).toBe('scale=-2:720');
+    });
+
+    it('should build scale command with both dimensions (exact resize)', () => {
+      const cmd = builder.buildScaleCmd('/input/video.mp4', '/output/scaled.mp4', { width: 1280, height: 720 });
+
+      const vfIdx = cmd.indexOf('-vf');
+      expect(cmd[vfIdx + 1]).toBe('scale=1280:720');
+    });
+
+    it('should use libx264 codec with CRF 18', () => {
+      const cmd = builder.buildScaleCmd('/input/video.mp4', '/output/scaled.mp4', { width: 640 });
+
+      expect(cmd).toContain('-c:v');
+      const cvIdx = cmd.indexOf('-c:v');
+      expect(cmd[cvIdx + 1]).toBe('libx264');
+      expect(cmd).toContain('-crf');
+      const crfIdx = cmd.indexOf('-crf');
+      expect(cmd[crfIdx + 1]).toBe('18');
+    });
+
+    it('should use fast preset for encoding speed', () => {
+      const cmd = builder.buildScaleCmd('/input/video.mp4', '/output/scaled.mp4', { width: 640 });
+
+      expect(cmd).toContain('-preset');
+      const presetIdx = cmd.indexOf('-preset');
+      expect(cmd[presetIdx + 1]).toBe('fast');
+    });
+
+    it('should set output as last argument', () => {
+      const cmd = builder.buildScaleCmd('/input/video.mp4', '/output/scaled.mp4', { width: 640 });
+      expect(cmd[cmd.length - 1]).toBe('/output/scaled.mp4');
+    });
+  });
 });

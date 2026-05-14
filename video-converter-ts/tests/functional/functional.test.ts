@@ -10,7 +10,7 @@
  *   npm test -- --run tests/functional/functional.test.ts
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { existsSync, statSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -43,12 +43,15 @@ const canRun = ffmpegAvailable && videoExists;
 let VideoConverter: any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let OutputFormat: any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let VideoScaler: any;
 
 beforeAll(async () => {
   if (canRun) {
     const mod = await import('../../src/index.js');
     VideoConverter = mod.VideoConverter;
     OutputFormat = mod.OutputFormat;
+    VideoScaler = mod.VideoScaler;
   }
 });
 
@@ -150,6 +153,98 @@ describe.skipIf(!canRun)(
       await expect(
         converter.convert('nonexistent.mp4', join(tmpDir, 'out.avi'), OutputFormat.AVI_MJPEG)
       ).rejects.toThrow();
+    });
+
+    // ── Scaling (pre-processing) tests ──────────────────────────────────
+
+    it('VideoScaler - 独立缩放 API（仅指定宽度）', async () => {
+      const scaler = new VideoScaler();
+      const outputPath = join(tmpDir, 'scaled_width.mp4');
+
+      await scaler.scale(TEST_VIDEO, outputPath, { width: 320 });
+
+      expect(existsSync(outputPath)).toBe(true);
+      expect(statSync(outputPath).size).toBeGreaterThan(0);
+
+      // Verify dimensions via ffprobe
+      const info = await new VideoConverter().getVideoInfo(outputPath);
+      expect(info.width).toBe(320);
+      // Height is auto-calculated (even number, aspect ratio preserved)
+      expect(info.height).toBeGreaterThan(0);
+      expect(info.height % 2).toBe(0);
+
+      console.log(`  缩放 (宽=320): ${info.width}x${info.height}`);
+    });
+
+    it('VideoScaler - 独立缩放 API（仅指定高度）', async () => {
+      const scaler = new VideoScaler();
+      const outputPath = join(tmpDir, 'scaled_height.mp4');
+
+      await scaler.scale(TEST_VIDEO, outputPath, { height: 180 });
+
+      expect(existsSync(outputPath)).toBe(true);
+      const info = await new VideoConverter().getVideoInfo(outputPath);
+      expect(info.height).toBe(180);
+      expect(info.width).toBeGreaterThan(0);
+      expect(info.width % 2).toBe(0);
+
+      console.log(`  缩放 (高=180): ${info.width}x${info.height}`);
+    });
+
+    it('VideoScaler - 独立缩放 API（同时指定宽高）', async () => {
+      const scaler = new VideoScaler();
+      const outputPath = join(tmpDir, 'scaled_exact.mp4');
+
+      await scaler.scale(TEST_VIDEO, outputPath, { width: 320, height: 240 });
+
+      expect(existsSync(outputPath)).toBe(true);
+      const info = await new VideoConverter().getVideoInfo(outputPath);
+      expect(info.width).toBe(320);
+      expect(info.height).toBe(240);
+
+      console.log(`  缩放 (精确 320x240): ${info.width}x${info.height}`);
+    });
+
+    it('convert - 缩放后转换为 AVI-MJPEG', async () => {
+      const converter = new VideoConverter();
+      const outputPath = join(tmpDir, 'output_scaled.avi');
+
+      const result = await converter.convert(TEST_VIDEO, outputPath, OutputFormat.AVI_MJPEG, {
+        quality: 5,
+        scale: { width: 320 },
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.inputPath).toBe(TEST_VIDEO); // original path preserved
+      expect(existsSync(outputPath)).toBe(true);
+
+      // Verify RIFF header
+      const data = readFileSync(outputPath);
+      expect(data.subarray(0, 4).toString('ascii')).toBe('RIFF');
+
+      // Verify output resolution matches scale target
+      const info = await converter.getVideoInfo(outputPath);
+      expect(info.width).toBe(320);
+
+      console.log(`  缩放后 AVI-MJPEG: ${info.width}x${info.height}, ${statSync(outputPath).size} 字节`);
+    });
+
+    it('convert - 缩放后转换为 MJPEG', async () => {
+      const converter = new VideoConverter();
+      const outputPath = join(tmpDir, 'output_scaled.mjpeg');
+
+      const result = await converter.convert(TEST_VIDEO, outputPath, OutputFormat.MJPEG, {
+        quality: 5,
+        scale: { width: 320, height: 240 },
+      });
+
+      expect(result.success).toBe(true);
+      expect(existsSync(outputPath)).toBe(true);
+      const data = readFileSync(outputPath);
+      expect(data[0]).toBe(0xff);
+      expect(data[1]).toBe(0xd8);
+
+      console.log(`  缩放后 MJPEG: ${statSync(outputPath).size} 字节`);
     });
   }
 );

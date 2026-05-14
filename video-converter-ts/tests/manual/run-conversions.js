@@ -2,20 +2,44 @@
  * 人工测试脚本 — video-converter-ts
  *
  * 将测试视频转换为各种格式，输出到 test-output/ 目录，供人工校验。
+ * 每次运行前会**清理** test-output/ 目录中的历史输出，确保结果干净。
  *
  * 运行方式（在 video-converter-ts/ 目录下）：
  *   npm run manual-test
  *   或
  *   node tests/manual/run-conversions.js [input.mp4]
  *
- * 结束后请在 test-output/ 目录中手动验证转换输出：
- *   - birds.mjpeg   → 可用 ffplay / 视频播放器打开
- *   - birds.avi     → 可用 ffplay / 视频播放器打开（MJPEG in AVI）
- *   - birds_15fps.avi → 同上，帧率限制为 15fps
- *   - birds.h264    → 可用 ffplay birds.h264 打开
+ * 测试内容：
+ *   [VideoScaler 独立缩放]
+ *   - birds_scaled_w320.mp4       → 缩小：宽度 320px，高度自动保持宽高比（偶数）
+ *   - birds_scaled_h180.mp4       → 缩小：高度 180px，宽度自动保持宽高比（偶数）
+ *   - birds_scaled_320x240.mp4    → 缩小：精确 320×240（可能改变宽高比）
+ *   - birds_scaled_w1280.mp4      → 放大：宽度 1280px，高度自动保持宽高比
+ *   - birds_scaled_1920x1080.mp4  → 放大：精确 1920×1080
+ *
+ *   [VideoConverter 转换（原始尺寸）]
+ *   - birds.avi                   → AVI-MJPEG，默认质量
+ *   - birds_hq.avi                → AVI-MJPEG，高质量（q=1）
+ *   - birds_15fps.avi             → AVI-MJPEG，限速 15fps
+ *   - birds.mjpeg                 → MJPEG 裸流
+ *   - birds.h264                  → H264 + 自定义 32 字节头
+ *
+ *   [VideoConverter 转换（缩放后）]
+ *   - birds_scaled_w320.avi       → 缩小 320px 宽，再转 AVI-MJPEG
+ *   - birds_scaled_320x240.avi    → 缩小至 320×240，再转 AVI-MJPEG
+ *   - birds_scaled_w320.mjpeg     → 缩小 320px 宽，再转 MJPEG 裸流
+ *   - birds_scaled_w320.h264      → 缩小 320px 宽，再转 H264
+ *   - birds_scaled_w1280.avi      → 放大 1280px 宽，再转 AVI-MJPEG
+ *
+ * 验证方法（运行结束后）：
+ *   ffplay  test-output/birds.avi                  # 原始 AVI 播放
+ *   ffplay  test-output/birds_scaled_w320.avi      # 缩小后 AVI（分辨率应更小）
+ *   ffplay  test-output/birds_scaled_w1280.avi     # 放大后 AVI（分辨率应更大）
+ *   ffprobe test-output/birds_scaled_w1280.mp4     # 检查放大后分辨率
+ *   ffprobe test-output/birds_scaled_1920x1080.mp4 # 检查放大精确尺寸
  */
 
-import { VideoConverter, OutputFormat } from '../../dist/index.js';
+import { VideoConverter, VideoScaler, OutputFormat } from '../../dist/index.js';
 import { existsSync, mkdirSync, statSync } from 'fs';
 import { join, dirname, basename, extname } from 'path';
 import { fileURLToPath } from 'url';
@@ -50,6 +74,15 @@ if (!existsSync(inputPath)) {
   process.exit(1);
 }
 
+// ─── 清理历史输出 ──────────────────────────────────────────────────────────
+if (existsSync(OUTPUT_DIR)) {
+  // 只清理目录内的文件（避免 Windows 目录句柄占用导致删目录失败）
+  const { readdirSync, unlinkSync } = await import('fs');
+  for (const f of readdirSync(OUTPUT_DIR)) {
+    try { unlinkSync(join(OUTPUT_DIR, f)); } catch { /* ignore locked files */ }
+  }
+  console.log(`🧹 已清理历史输出: ${OUTPUT_DIR}`);
+}
 mkdirSync(OUTPUT_DIR, { recursive: true });
 
 // ─── 工具函数 ─────────────────────────────────────────────────────────────
@@ -61,6 +94,61 @@ function formatBytes(bytes) {
 
 function printSep() {
   console.log('─'.repeat(60));
+}
+
+// ─── 独立缩放任务（VideoScaler 单独 API）─────────────────────────────────
+async function runScalerTasks() {
+  console.log('');
+  console.log('📐  VideoScaler 独立缩放测试');
+  printSep();
+
+  const scalerTasks = [
+    {
+      label: '缩小 — 仅指定宽度 320px（保持宽高比）',
+      outputFile: `${inputName}_scaled_w320.mp4`,
+      options: { width: 320 },
+    },
+    {
+      label: '缩小 — 仅指定高度 180px（保持宽高比）',
+      outputFile: `${inputName}_scaled_h180.mp4`,
+      options: { height: 180 },
+    },
+    {
+      label: '缩小 — 精确尺寸 320×240',
+      outputFile: `${inputName}_scaled_320x240.mp4`,
+      options: { width: 320, height: 240 },
+    },
+    {
+      label: '放大 — 仅指定宽度 1280px（保持宽高比）',
+      outputFile: `${inputName}_scaled_w1280.mp4`,
+      options: { width: 1280 },
+    },
+    {
+      label: '放大 — 精确尺寸 1920×1080',
+      outputFile: `${inputName}_scaled_1920x1080.mp4`,
+      options: { width: 1920, height: 1080 },
+    },
+  ];
+
+  const scalerResults = [];
+  for (const task of scalerTasks) {
+    const outputPath = join(OUTPUT_DIR, task.outputFile);
+    process.stdout.write(`  ⏳ ${task.label} ...`);
+    const start = Date.now();
+    try {
+      const scaler = new VideoScaler((c, t) => {});
+      await scaler.scale(inputPath, outputPath, task.options);
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      const size = existsSync(outputPath) ? statSync(outputPath).size : 0;
+      console.log(`  ✅ 完成 (${elapsed}s, ${formatBytes(size)})`);
+      scalerResults.push({ label: task.label, file: task.outputFile, success: true, size, elapsed });
+    } catch (err) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      console.log(`  ❌ 失败 (${elapsed}s): ${err.message}`);
+      scalerResults.push({ label: task.label, file: task.outputFile, success: false, error: err.message });
+    }
+  }
+  return scalerResults;
 }
 
 // ─── 转换任务列表 ─────────────────────────────────────────────────────────
@@ -95,6 +183,37 @@ const tasks = [
     format: OutputFormat.H264,
     options: {},
   },
+  // ── Scale + convert tasks ──────────────────────────────────────────────
+  {
+    label: 'AVI-MJPEG（缩放 320px 宽，保持宽高比）',
+    outputFile: `${inputName}_scaled_w320.avi`,
+    format: OutputFormat.AVI_MJPEG,
+    options: { scale: { width: 320 } },
+  },
+  {
+    label: 'AVI-MJPEG（缩放精确 320×240）',
+    outputFile: `${inputName}_scaled_320x240.avi`,
+    format: OutputFormat.AVI_MJPEG,
+    options: { scale: { width: 320, height: 240 } },
+  },
+  {
+    label: 'MJPEG（缩放 320px 宽）',
+    outputFile: `${inputName}_scaled_w320.mjpeg`,
+    format: OutputFormat.MJPEG,
+    options: { scale: { width: 320 } },
+  },
+  {
+    label: 'H264（缩放 320px 宽，保持宽高比）',
+    outputFile: `${inputName}_scaled_w320.h264`,
+    format: OutputFormat.H264,
+    options: { scale: { width: 320 } },
+  },
+  {
+    label: 'AVI-MJPEG（放大 1280px 宽，保持宽高比）',
+    outputFile: `${inputName}_scaled_w1280.avi`,
+    format: OutputFormat.AVI_MJPEG,
+    options: { scale: { width: 1280 } },
+  },
 ];
 
 // ─── 主流程 ───────────────────────────────────────────────────────────────
@@ -107,7 +226,14 @@ printSep();
 
 const inputSize = statSync(inputPath).size;
 console.log(`输入大小: ${formatBytes(inputSize)}`);
+
+// Run standalone scaler tasks first
+const scalerResults = await runScalerTasks();
+
+// ─── 转换任务 ─────────────────────────────────────────────────────────────
 console.log('');
+console.log('🔄  视频转换测试（含 scale+convert 组合任务）');
+printSep();
 
 const results = [];
 
@@ -142,12 +268,21 @@ for (const task of tasks) {
 // ─── 汇总 ─────────────────────────────────────────────────────────────────
 console.log('');
 printSep();
-console.log('📊  转换汇总');
+console.log('📊  汇总');
 printSep();
+
+console.log('  [缩放器]');
+for (const r of scalerResults) {
+  const status = r.success ? '✅' : '❌';
+  const detail = r.success ? `${formatBytes(r.size)} (${r.elapsed}s)` : r.error;
+  console.log(`  ${status} ${r.file.padEnd(35)} ${detail}`);
+}
+console.log('');
+console.log('  [转换器]');
 for (const r of results) {
   const status = r.success ? '✅' : '❌';
   const detail = r.success ? `${formatBytes(r.size)} (${r.elapsed}s)` : r.error;
-  console.log(`  ${status} ${r.file.padEnd(25)} ${detail}`);
+  console.log(`  ${status} ${r.file.padEnd(35)} ${detail}`);
 }
 printSep();
 
@@ -156,11 +291,12 @@ console.log('🔍  请在以下目录中手动验证输出:');
 console.log(`   ${OUTPUT_DIR}`);
 console.log('');
 console.log('   验证方法:');
-console.log('   ffplay test-output/birds.avi      # AVI 播放');
-console.log('   ffplay test-output/birds.mjpeg    # MJPEG 播放');
-console.log('   ffplay test-output/birds.h264     # H264 播放');
-console.log('   ffprobe test-output/birds.avi     # 检查格式信息');
+console.log('   ffplay  test-output/birds.avi               # AVI 播放');
+console.log('   ffplay  test-output/birds_scaled_w320.avi   # 缩放后 AVI 播放');
+console.log('   ffprobe test-output/birds_scaled_w320.mp4   # 检查缩放后分辨率');
+console.log('   ffprobe test-output/birds_scaled_w320.avi   # 检查缩放+转换后分辨率');
 console.log('');
 
-const failed = results.filter(r => !r.success).length;
+const allResults = [...scalerResults, ...results];
+const failed = allResults.filter(r => !r.success).length;
 process.exit(failed > 0 ? 1 : 0);
