@@ -40,3 +40,6 @@ temp/
 
 # OS
 Thumbs.db
+
+# Test output artifacts
+test-output/
