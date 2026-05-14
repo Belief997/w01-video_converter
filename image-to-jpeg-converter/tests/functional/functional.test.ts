@@ -70,7 +70,7 @@ describe.skipIf(!canRun)(
       await convertToJpeg({
         inputPath: TEST_IMAGE,
         outputPath,
-        sampling: SamplingFactor.YUV420,
+        samplingFactor: SamplingFactor.YUV420,
         quality: 5,
       });
 
@@ -91,7 +91,7 @@ describe.skipIf(!canRun)(
       await convertToJpeg({
         inputPath: TEST_IMAGE,
         outputPath,
-        sampling: SamplingFactor.YUV444,
+        samplingFactor: SamplingFactor.YUV444,
         quality: 2,
       });
 
@@ -107,7 +107,7 @@ describe.skipIf(!canRun)(
       await convertToJpeg({
         inputPath: TEST_IMAGE,
         outputPath,
-        sampling: SamplingFactor.GRAY,
+        samplingFactor: SamplingFactor.Grayscale,
         quality: 10,
       });
 
@@ -123,7 +123,7 @@ describe.skipIf(!canRun)(
       await convertToJpeg({
         inputPath: TEST_IMAGE,
         outputPath,
-        sampling: SamplingFactor.YUV420,
+        samplingFactor: SamplingFactor.YUV420,
         quality: 5,
       });
 
@@ -158,7 +158,7 @@ describe.skipIf(!canRun)(
       await convertToJpeg({
         inputPath: TEST_IMAGE,
         outputPath,
-        sampling: SamplingFactor.YUV420,
+        samplingFactor: SamplingFactor.YUV420,
         quality: 5,
       });
 
@@ -180,7 +180,7 @@ describe.skipIf(!canRun)(
       await convertToJpeg({
         inputPath: TEST_IMAGE,
         outputPath,
-        sampling: SamplingFactor.YUV420,
+        samplingFactor: SamplingFactor.YUV420,
         quality: 5,
       });
 
@@ -196,7 +196,7 @@ describe.skipIf(!canRun)(
         convertToJpeg({
           inputPath: 'nonexistent_image.png',
           outputPath: join(tmpDir, 'should_not_exist.bin'),
-          sampling: SamplingFactor.YUV420,
+          samplingFactor: SamplingFactor.YUV420,
           quality: 5,
         })
       ).rejects.toThrow();

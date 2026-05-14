@@ -15,6 +15,7 @@
     "test:coverage": "vitest run --coverage",
     "lint": "tsc --noEmit",
     "start": "node dist/cli.js",
+    "manual-test": "npm run build && node tests/manual/run-conversions.js",
     "prepublishOnly": "npm run build && npm test"
   },
   "files": [
