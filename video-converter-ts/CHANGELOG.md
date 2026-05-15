@@ -30,6 +30,11 @@
 
 - `VideoConverter.convert()` 内部预处理逻辑重构：单一 `scale?` 块替换为通用预处理 pipeline 循环，`scale` 字段自动转换为单步 pipeline 保持向后兼容
 
+### Docs
+
+- 合并 `QUICK_START.md` 和 `INTEGRATION.md` 全部内容到 `SOURCE_INTEGRATION.md`，删除冗余文档，`SOURCE_INTEGRATION.md` 成为唯一集成与 API 参考文档
+- `README.md` 更新 API 概览（补全 v1.2.0 类型）、项目结构和版本记录
+
 ---
 
 ## [1.1.0] - 2026-05-14

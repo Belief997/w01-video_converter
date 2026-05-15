@@ -112,6 +112,15 @@ enum OutputFormat {
   AVI_MJPEG = 'avi_mjpeg',  // AVI 容器封装，8 字节对齐
   H264      = 'h264'        // H.264 裸流 + 自定义 32 字节头部
 }
+```
+
+| 格式 | 枚举值 | 推荐扩展名 | 说明 |
+|------|--------|------------|------|
+| MJPEG | `OutputFormat.MJPEG` | `.mjpeg` | 连续 JPEG 帧裸流 |
+| AVI-MJPEG | `OutputFormat.AVI_MJPEG` | `.avi` | AVI 容器，所有帧 8 字节对齐，含 idx1 索引 |
+| H264 | `OutputFormat.H264` | `.h264` | H.264 裸流 + 自定义 32 字节头部（含分辨率、帧数、帧时间）|
+
+```typescript
 
 // 缩放参数（width / height 至少提供一个，均为正整数）
 interface ScaleOptions {
@@ -251,6 +260,29 @@ class VideoFormatError extends VideoConverterError {}     // 不支持的格式
 class FFmpegNotFoundError extends VideoConverterError {}  // FFmpeg 未安装或不在 PATH
 class FFmpegError extends VideoConverterError {}          // FFmpeg 执行失败
 class PostProcessError extends VideoConverterError {}     // 后处理失败
+```
+
+### 完整导入列表
+
+```typescript
+import {
+  VideoConverter,       // 主转换器类
+  VideoScaler,          // 独立缩放器类
+  VideoCropper,         // 独立裁剪器类
+  OutputFormat,         // 输出格式枚举：MJPEG | AVI_MJPEG | H264
+  VideoInfo,            // 视频信息接口
+  ConversionResult,     // 转换结果接口
+  ConversionOptions,    // 转换选项（含 preprocess、scale、debug 等）
+  ScaleOptions,         // 缩放参数 { width?, height? }
+  CropOptions,          // 裁剪参数 { width, height, x?, y? }
+  PreprocessStep,       // 预处理步骤联合类型
+  ProgressCallback,     // 进度回调类型 (current: number, total: number) => void
+  VideoConverterError,  // 基础错误类
+  FFmpegNotFoundError,  // FFmpeg 未安装或不在 PATH
+  FFmpegError,          // FFmpeg 执行失败
+  VideoFormatError,     // 不支持的视频格式
+  PostProcessError      // 后处理失败
+} from './video-converter';
 ```
 
 ---
@@ -479,6 +511,88 @@ try {
 
 ---
 
+## VSCode 插件完整集成示例
+
+以下示例展示在 VSCode 插件中集成的典型用法。
+
+```typescript
+// src/commands/convertVideo.ts
+import * as vscode from 'vscode';
+import * as path from 'path';
+import {
+  VideoConverter,
+  OutputFormat,
+  FFmpegNotFoundError,
+  VideoFormatError,
+  FFmpegError
+} from '../video-converter';
+
+export async function convertVideoCommand(): Promise<void> {
+  const files = await vscode.window.showOpenDialog({
+    canSelectMany: false,
+    filters: { '视频文件': ['mp4', 'avi', 'mov', 'mkv'] },
+    title: '选择要转换的视频文件'
+  });
+
+  if (!files || files.length === 0) return;
+
+  const inputPath = files[0].fsPath;
+  const outputPath = path.join(
+    path.dirname(inputPath),
+    `${path.basename(inputPath, path.extname(inputPath))}_converted.avi`
+  );
+
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: '视频转换中', cancellable: false },
+    async (progress) => {
+      const converter = new VideoConverter((current, total) => {
+        const pct = Math.round(current / total * 100);
+        progress.report({ message: `${pct}% (${current}/${total} 帧)` });
+      });
+
+      try {
+        await converter.convert(inputPath, outputPath, OutputFormat.AVI_MJPEG, {
+          preprocess: [{ type: 'scale', options: { width: 640 } }]
+        });
+        vscode.window.showInformationMessage(`转换完成: ${outputPath}`);
+      } catch (error) {
+        if (error instanceof FFmpegNotFoundError) {
+          vscode.window.showErrorMessage('FFmpeg 未安装，请先安装 FFmpeg 并加入 PATH');
+        } else if (error instanceof VideoFormatError) {
+          vscode.window.showErrorMessage(`格式错误: ${(error as Error).message}`);
+        } else if (error instanceof FFmpegError) {
+          vscode.window.showErrorMessage(`FFmpeg 执行失败: ${(error as Error).message}`);
+        } else {
+          vscode.window.showErrorMessage(`转换失败: ${(error as Error).message}`);
+        }
+      }
+    }
+  );
+}
+```
+
+---
+
+## 性能建议
+
+多次转换时复用转换器实例，避免重复初始化开销：
+
+```typescript
+class VideoService {
+  private readonly converter: VideoConverter;
+
+  constructor(onProgress?: ProgressCallback) {
+    this.converter = new VideoConverter(onProgress);
+  }
+
+  convert(input: string, output: string, format: OutputFormat, options?: ConversionOptions) {
+    return this.converter.convert(input, output, format, options);
+  }
+}
+```
+
+---
+
 ## 示例项目结构（VSCode 插件）
 
 ```
@@ -497,6 +611,7 @@ your-vscode-extension/
 │       ├── index.ts
 │       ├── preprocess/
 │       │   ├── video-scaler.ts
+│       │   ├── video-cropper.ts
 │       │   └── index.ts
 │       └── postprocess/
 │           ├── avi-aligner.ts
@@ -510,6 +625,18 @@ your-vscode-extension/
 ---
 
 ## 常见问题
+
+### Q: 用户需要安装 FFmpeg 吗？
+
+**A**: 是的。FFmpeg 必须安装在系统中并在 PATH 里，用 `ffmpeg -version` 验证。
+
+### Q: 支持哪些输入视频格式？
+
+**A**: FFmpeg 支持的所有格式，包括 MP4、AVI、MOV、MKV、FLV 等。
+
+### Q: 如何处理大文件？
+
+**A**: 转换是异步操作，使用进度回调向用户展示进度即可，不会阻塞主线程。
 
 ### Q: 需要安装 commander 吗？
 

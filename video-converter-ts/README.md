@@ -5,9 +5,7 @@
 ## 文档导航
 
 - 📖 **[README.md](./README.md)** - 项目说明（当前文档）
-- 🚀 **[QUICK_START.md](./QUICK_START.md)** - 5 分钟快速开始
-- 🔧 **[INTEGRATION.md](./INTEGRATION.md)** - 项目集成指南
-- 📝 **[SOURCE_INTEGRATION.md](./SOURCE_INTEGRATION.md)** - 完整源码集成参考
+- 📝 **[SOURCE_INTEGRATION.md](./SOURCE_INTEGRATION.md)** - 完整集成指南与 API 参考
 
 ## 功能特性
 
@@ -75,14 +73,17 @@ console.log('转换完成:', result);
 
 ```typescript
 import {
-  VideoConverter,      // 主转换器类
-  VideoScaler,         // 独立缩放器类
-  OutputFormat,        // 输出格式枚举：MJPEG | AVI_MJPEG | H264
-  VideoInfo,           // 视频信息接口
-  ConversionResult,    // 转换结果接口
-  ConversionOptions,   // 转换选项（含 scale 字段）
-  ScaleOptions,        // 缩放参数 { width?, height? }
-  ProgressCallback,    // 进度回调类型
+  VideoConverter,       // 主转换器类
+  VideoScaler,          // 独立缩放器类
+  VideoCropper,         // 独立裁剪器类
+  OutputFormat,         // 输出格式枚举：MJPEG | AVI_MJPEG | H264
+  VideoInfo,            // 视频信息接口
+  ConversionResult,     // 转换结果接口
+  ConversionOptions,    // 转换选项（含 preprocess、scale、debug 等）
+  ScaleOptions,         // 缩放参数 { width?, height? }
+  CropOptions,          // 裁剪参数 { width, height, x?, y? }
+  PreprocessStep,       // 预处理步骤联合类型
+  ProgressCallback,     // 进度回调类型
   VideoConverterError,
   VideoFormatError,
   FFmpegNotFoundError,
@@ -140,6 +141,7 @@ video-converter-ts/
 │   ├── index.ts            # 模块导出
 │   ├── preprocess/
 │   │   ├── video-scaler.ts # 独立缩放器（VideoScaler）
+│   │   ├── video-cropper.ts # 独立裁剪器（VideoCropper）
 │   │   └── index.ts
 │   └── postprocess/
 │       ├── avi-aligner.ts  # AVI 8字节对齐
@@ -148,6 +150,7 @@ video-converter-ts/
 │       └── index.ts
 ├── tests/
 │   ├── video-scaler.test.ts
+│   ├── video-cropper.test.ts
 │   ├── avi-aligner.test.ts
 │   ├── mjpeg-packer.test.ts
 │   ├── parser.test.ts
@@ -189,6 +192,8 @@ cmd /c "npm test -- --run"
 ```
 
 ## 版本
+
+**1.2.0** — 新增 `VideoCropper` 独立裁剪器、`CropOptions`、`PreprocessStep` 联合类型、`ConversionOptions.preprocess` 有序 pipeline；`scale` 字段保持向后兼容
 
 **1.1.0** — 新增 `VideoScaler` 独立缩放器、`ConversionOptions.scale` 字段、调试模式中间文件保留
 
