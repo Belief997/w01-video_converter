@@ -15,6 +15,7 @@
 - 根目录 `README.md`：仓库概览与快速开始
 - `docs/` 文档框架：架构、格式规范、各模块说明
 - `agent/agent.md`：Agent 开发约束与项目上下文
+- `video-converter-ts@1.3.0`：新增 `AVI_MSV1` 输出格式（Microsoft Video 1 / CRAM），支持 GIF 透明背景合成、scale/crop preprocess pipeline、自动 4 倍数尺寸对齐
 
 ### Changed
 - 清理散落在根目录的测试脚本和临时文档
