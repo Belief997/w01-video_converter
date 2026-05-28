@@ -1,6 +1,6 @@
 # Video Converter TypeScript
 
-视频转换工具 - TypeScript 实现版本，支持多种输出格式。版本 1.2.0。
+视频转换工具 - TypeScript 实现版本，支持多种输出格式。版本 1.3.0。
 
 ## 文档导航
 
@@ -9,7 +9,8 @@
 
 ## 功能特性
 
-- 支持三种输出格式：MJPEG、AVI-MJPEG、H264
+- 支持四种输出格式：MJPEG、AVI-MJPEG、H264、**AVI-MSV1（Microsoft Video 1）**
+- **GIF 透明背景合成**：AVI_MSV1（及 H264/MJPEG）格式支持通过 `backgroundColor` 参数将 GIF 透明区域合成为指定颜色（如 `white`、`black`、任意 CSS 颜色）
 - **视频缩放预处理**：转换前可对输入视频进行缩放（宽度/高度，自动保持宽高比）
 - **视频裁剪预处理**：转换前可对输入视频进行裁剪（居中或指定偏移）
 - **有序预处理 pipeline**：通过 `preprocess` 数组可组合多步缩放/裁剪，按顺序执行
@@ -76,7 +77,7 @@ import {
   VideoConverter,       // 主转换器类
   VideoScaler,          // 独立缩放器类
   VideoCropper,         // 独立裁剪器类
-  OutputFormat,         // 输出格式枚举：MJPEG | AVI_MJPEG | H264
+  OutputFormat,         // 输出格式枚举：MJPEG | AVI_MJPEG | H264 | AVI_MSV1
   VideoInfo,            // 视频信息接口
   ConversionResult,     // 转换结果接口
   ConversionOptions,    // 转换选项（含 preprocess、scale、debug 等）
@@ -108,7 +109,7 @@ node dist/cli.js --info -i input.mp4
 # 转换视频
 node dist/cli.js -i input.mp4 -o output.avi -f avi_mjpeg -v
 
-# 支持的格式：mjpeg | avi_mjpeg | h264
+# 支持的格式：mjpeg | avi_mjpeg | h264 | avi_msv1
 # 主要参数：-i 输入 -o 输出 -f 格式 -r 帧率 -q 质量 -v 详细 -d 调试
 ```
 
@@ -169,6 +170,12 @@ video-converter-ts/
 
 ## 输出格式说明
 
+### AVI-MSV1 格式
+- Microsoft Video 1 编码器（`msvideo1`），像素格式 `rgb555le`
+- 宽高自动对齐为 **4 的倍数**（编码器硬性要求）
+- 支持通过 `backgroundColor` 合成 GIF 透明背景
+- 质量通过 `-q:v 1–31` 控制（1 = 最佳）
+
 ### MJPEG 格式
 - 连续的 JPEG 帧，每帧以 SOI (0xFFD8) 开始，EOI (0xFFD9) 结束
 
@@ -192,6 +199,8 @@ cmd /c "npm test -- --run"
 ```
 
 ## 版本
+
+**1.3.0** — 新增 `AVI_MSV1` 输出格式（Microsoft Video 1），自动 4 倍数尺寸对齐，支持 GIF 透明背景合成
 
 **1.2.0** — 新增 `VideoCropper` 独立裁剪器、`CropOptions`、`PreprocessStep` 联合类型、`ConversionOptions.preprocess` 有序 pipeline；`scale` 字段保持向后兼容
 
