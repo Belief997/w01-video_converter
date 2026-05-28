@@ -200,6 +200,65 @@ async function runCropperTasks() {
   }
   return cropperResults;
 }
+// ─── GIF 转换任务 ─────────────────────────────────────────────────────────
+async function runGifTasks() {
+  console.log('');
+  console.log('🎞️   GIF 输入测试（含透明背景合成）');
+  printSep();
+
+  const gifNormal = join(REPO_ROOT, 'test_video', 'cat_00.gif');
+  const gifTransp = join(REPO_ROOT, 'test_video', 'cat_02.gif');
+
+  for (const gifPath of [gifNormal, gifTransp]) {
+    if (!existsSync(gifPath)) {
+      console.warn(`  ⚠️  跳过 GIF 测试：文件不存在: ${gifPath}`);
+      return [];
+    }
+  }
+
+  const gifTasks = [
+    // cat_00.gif — 无透明通道
+    { label: 'cat_00.gif → H264（无透明）',        file: 'cat_00.h264',        input: gifNormal, format: OutputFormat.H264,      options: {} },
+    { label: 'cat_00.gif → AVI-MJPEG（无透明）',   file: 'cat_00.avi',         input: gifNormal, format: OutputFormat.AVI_MJPEG, options: {} },
+    { label: 'cat_00.gif → MJPEG（无透明）',       file: 'cat_00.mjpeg',       input: gifNormal, format: OutputFormat.MJPEG,     options: {} },
+    // cat_02.gif — 透明通道 + 白色背景
+    { label: 'cat_02.gif → H264（白色背景）',       file: 'cat_02_white.h264',  input: gifTransp, format: OutputFormat.H264,      options: { backgroundColor: 'white' } },
+    { label: 'cat_02.gif → AVI-MJPEG（白色背景）',  file: 'cat_02_white.avi',   input: gifTransp, format: OutputFormat.AVI_MJPEG, options: { backgroundColor: 'white' } },
+    { label: 'cat_02.gif → MJPEG（白色背景）',      file: 'cat_02_white.mjpeg', input: gifTransp, format: OutputFormat.MJPEG,     options: { backgroundColor: 'white' } },
+    // cat_02.gif — 透明通道 + 黑色背景
+    { label: 'cat_02.gif → H264（黑色背景）',       file: 'cat_02_black.h264',  input: gifTransp, format: OutputFormat.H264,      options: { backgroundColor: 'black' } },
+    { label: 'cat_02.gif → AVI-MJPEG（黑色背景）',  file: 'cat_02_black.avi',   input: gifTransp, format: OutputFormat.AVI_MJPEG, options: { backgroundColor: 'black' } },
+    { label: 'cat_02.gif → MJPEG（黑色背景）',      file: 'cat_02_black.mjpeg', input: gifTransp, format: OutputFormat.MJPEG,     options: { backgroundColor: 'black' } },
+  ];
+
+  const gifResults = [];
+  for (const task of gifTasks) {
+    const outputPath = join(OUTPUT_DIR, task.file);
+    process.stdout.write(`  ⏳ ${task.label} ...`);
+    const start = Date.now();
+    try {
+      let lastProgress = 0;
+      const converter = new VideoConverter((current, total) => {
+        const pct = total > 0 ? Math.floor((current / total) * 100) : 0;
+        if (pct - lastProgress >= 20) {
+          process.stdout.write(` ${pct}%`);
+          lastProgress = pct;
+        }
+      });
+      await converter.convert(task.input, outputPath, task.format, task.options);
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      const size = existsSync(outputPath) ? statSync(outputPath).size : 0;
+      console.log(`  ✅ 完成 (${elapsed}s, ${formatBytes(size)})`);
+      gifResults.push({ label: task.label, file: task.file, success: true, size, elapsed });
+    } catch (err) {
+      const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+      console.log(`  ❌ 失败 (${elapsed}s): ${err.message}`);
+      gifResults.push({ label: task.label, file: task.file, success: false, error: err.message });
+    }
+  }
+  return gifResults;
+}
+
 const tasks = [
   {
     label: 'AVI-MJPEG（默认质量）',
@@ -310,6 +369,9 @@ const scalerResults = await runScalerTasks();
 // Run standalone cropper tasks
 const cropperResults = await runCropperTasks();
 
+// Run GIF conversion tasks
+const gifResults = await runGifTasks();
+
 // ─── 转换任务 ─────────────────────────────────────────────────────────────
 console.log('');
 console.log('🔄  视频转换测试（含 scale/crop preprocess 组合任务）');
@@ -365,6 +427,13 @@ for (const r of cropperResults) {
   console.log(`  ${status} ${r.file.padEnd(40)} ${detail}`);
 }
 console.log('');
+console.log('  [GIF 转换]');
+for (const r of gifResults) {
+  const status = r.success ? '✅' : '❌';
+  const detail = r.success ? `${formatBytes(r.size)} (${r.elapsed}s)` : r.error;
+  console.log(`  ${status} ${r.file.padEnd(40)} ${detail}`);
+}
+console.log('');
 console.log('  [转换器]');
 for (const r of results) {
   const status = r.success ? '✅' : '❌';
@@ -385,8 +454,13 @@ console.log('   ffplay  test-output/birds_scale_crop.avi       # 先缩放再裁
 console.log('   ffprobe test-output/birds_scaled_w320.mp4      # 检查缩放后分辨率');
 console.log('   ffprobe test-output/birds_cropped_center.mp4   # 检查居中裁剪分辨率');
 console.log('   ffprobe test-output/birds_scaled_w320.avi      # 检查缩放+转换后分辨率');
+console.log('   ffplay  test-output/cat_00.avi                 # GIF（无透明）AVI 播放');
+console.log('   ffplay  test-output/cat_02_white.avi           # GIF 白色背景 AVI 播放');
+console.log('   ffplay  test-output/cat_02_black.avi           # GIF 黑色背景 AVI 播放');
+console.log('   ffplay  test-output/cat_02_white.h264          # GIF 白色背景 H264 播放');
+console.log('   ffplay  test-output/cat_02_black.h264          # GIF 黑色背景 H264 播放');
 console.log('');
 
-const allResults = [...scalerResults, ...cropperResults, ...results];
+const allResults = [...scalerResults, ...cropperResults, ...gifResults, ...results];
 const failed = allResults.filter(r => !r.success).length;
 process.exit(failed > 0 ? 1 : 0);

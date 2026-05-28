@@ -143,4 +143,11 @@ export interface ConversionOptions {
    * Ignored when `preprocess` is set.
    */
   scale?: ScaleOptions;
+  /**
+   * Background color to composite behind transparent frames (e.g., animated GIF with alpha).
+   * Accepts FFmpeg color values: hex ('#RRGGBB') or named colors ('white', 'black').
+   * Applied during the main conversion step only; has no effect when `preprocess` steps
+   * are used because intermediate files do not preserve the alpha channel.
+   */
+  backgroundColor?: string;
 }

@@ -240,4 +240,119 @@ describe('FFmpegBuilder', () => {
       expect(cmd[cmd.length - 1]).toBe('/output/cropped.mp4');
     });
   });
+
+  describe('backgroundColor support (GIF transparency)', () => {
+    describe('buildMjpegFramesCmd with backgroundColor', () => {
+      it('should use filter_complex instead of -vf when backgroundColor is provided', () => {
+        const cmd = builder.buildMjpegFramesCmd('/input/animation.gif', '/output/frames', 10, 5, '#FFFFFF');
+
+        expect(cmd).toContain('-filter_complex');
+        expect(cmd).not.toContain('-vf');
+      });
+
+      it('should include lavfi color source input when backgroundColor is provided', () => {
+        const cmd = builder.buildMjpegFramesCmd('/input/animation.gif', '/output/frames', 10, 5, '#FFFFFF');
+
+        expect(cmd).toContain('-f');
+        expect(cmd).toContain('lavfi');
+        expect(cmd).toContain('color=c=#FFFFFF');
+      });
+
+      it('should use scale2ref overlay with shortest=1 in filter_complex', () => {
+        const cmd = builder.buildMjpegFramesCmd('/input/animation.gif', '/output/frames', 10, 5, '#FFFFFF');
+
+        const fcIdx = cmd.indexOf('-filter_complex');
+        const filterGraph = cmd[fcIdx + 1];
+        expect(filterGraph).toContain('scale2ref');
+        expect(filterGraph).toContain('overlay=shortest=1');
+        expect(filterGraph).toContain('format=yuvj420p');
+      });
+
+      it('should map the composited output stream', () => {
+        const cmd = builder.buildMjpegFramesCmd('/input/animation.gif', '/output/frames', 10, 5, 'white');
+
+        expect(cmd).toContain('-map');
+        expect(cmd).toContain('[out]');
+      });
+
+      it('should still include frame rate and quality parameters', () => {
+        const cmd = builder.buildMjpegFramesCmd('/input/animation.gif', '/output/frames', 10, 3, '#000000');
+
+        expect(cmd).toContain('-r');
+        expect(cmd[cmd.indexOf('-r') + 1]).toBe('10');
+        expect(cmd).toContain('-q:v');
+        expect(cmd[cmd.indexOf('-q:v') + 1]).toBe('3');
+      });
+
+      it('should not use filter_complex without backgroundColor (standard path unchanged)', () => {
+        const cmd = builder.buildMjpegFramesCmd('/input/video.mp4', '/output/frames');
+
+        expect(cmd).toContain('-vf');
+        expect(cmd).not.toContain('-filter_complex');
+      });
+    });
+
+    describe('buildAviCmd with backgroundColor', () => {
+      it('should use filter_complex when backgroundColor is provided', () => {
+        const cmd = builder.buildAviCmd('/input/animation.gif', '/output/video.avi', 10, 5, '#FFFFFF');
+
+        expect(cmd).toContain('-filter_complex');
+        expect(cmd).not.toContain('-vf');
+      });
+
+      it('should include lavfi color source and overlay=shortest=1', () => {
+        const cmd = builder.buildAviCmd('/input/animation.gif', '/output/video.avi', 10, 5, 'white');
+
+        expect(cmd).toContain('lavfi');
+        const fcIdx = cmd.indexOf('-filter_complex');
+        const filterGraph = cmd[fcIdx + 1];
+        expect(filterGraph).toContain('overlay=shortest=1');
+      });
+
+      it('should still include -an, -vcodec mjpeg, -pix_fmt yuvj420p', () => {
+        const cmd = builder.buildAviCmd('/input/animation.gif', '/output/video.avi', 10, 5, '#FFFFFF');
+
+        expect(cmd).toContain('-an');
+        expect(cmd).toContain('-vcodec');
+        expect(cmd[cmd.indexOf('-vcodec') + 1]).toBe('mjpeg');
+        expect(cmd).toContain('-pix_fmt');
+        expect(cmd[cmd.indexOf('-pix_fmt') + 1]).toBe('yuvj420p');
+      });
+    });
+
+    describe('buildH264Cmd with backgroundColor', () => {
+      it('should use filter_complex when backgroundColor is provided', () => {
+        const cmd = builder.buildH264Cmd('/input/animation.gif', '/output/video.h264', 10, 23, '#FFFFFF');
+
+        expect(cmd).toContain('-filter_complex');
+      });
+
+      it('should include lavfi color source and overlay=shortest=1', () => {
+        const cmd = builder.buildH264Cmd('/input/animation.gif', '/output/video.h264', 10, 23, 'black');
+
+        expect(cmd).toContain('lavfi');
+        const fcIdx = cmd.indexOf('-filter_complex');
+        const filterGraph = cmd[fcIdx + 1];
+        expect(filterGraph).toContain('overlay=shortest=1');
+      });
+
+      it('should keep -r before the first -i even with backgroundColor', () => {
+        const cmd = builder.buildH264Cmd('/input/animation.gif', '/output/video.h264', 10, 23, '#FFFFFF');
+
+        const rIdx = cmd.indexOf('-r');
+        const iIdx = cmd.indexOf('-i');
+        expect(rIdx).toBeGreaterThan(-1);
+        expect(rIdx).toBeLessThan(iIdx);
+      });
+
+      it('should still use libx264 and include x264-params with CRF', () => {
+        const cmd = builder.buildH264Cmd('/input/animation.gif', '/output/video.h264', 10, 18, '#FFFFFF');
+
+        expect(cmd).toContain('-c:v');
+        expect(cmd[cmd.indexOf('-c:v') + 1]).toBe('libx264');
+        const x264Idx = cmd.indexOf('-x264-params');
+        expect(cmd[x264Idx + 1]).toContain('crf=18');
+      });
+    });
+  });
 });

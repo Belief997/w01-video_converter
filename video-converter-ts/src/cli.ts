@@ -26,6 +26,7 @@ interface CliArgs {
   info?: boolean;
   verbose?: boolean;
   debug?: boolean;
+  bgColor?: string;
 }
 
 /**
@@ -84,7 +85,8 @@ function parseArgs(args?: string[]): CliArgs {
     .option('-q, --quality <value>', '编码质量: MJPEG/AVI 为 1-31（1最高质量），H264 为 CRF 值 0-51', parseInt)
     .option('--info', '仅显示输入视频信息，不进行转换')
     .option('-v, --verbose', '显示详细输出')
-    .option('-d, --debug', '调试模式：保留中间文件用于检查');
+    .option('-d, --debug', '调试模式：保留中间文件用于检查')
+    .option('--bg-color <color>', '背景色（用于透明 GIF，支持 FFmpeg 颜色值：十六进制 #RRGGBB 或命名颜色如 white）');
   
   program.parse(args);
   
@@ -98,7 +100,8 @@ function parseArgs(args?: string[]): CliArgs {
     quality: opts.quality,
     info: opts.info,
     verbose: opts.verbose,
-    debug: opts.debug
+    debug: opts.debug,
+    bgColor: opts.bgColor
   };
 }
 
@@ -174,7 +177,8 @@ export async function main(args?: string[]): Promise<number> {
       {
         frameRate: parsedArgs.framerate,
         quality: parsedArgs.quality,
-        debug: parsedArgs.debug
+        debug: parsedArgs.debug,
+        backgroundColor: parsedArgs.bgColor
       }
     );
     

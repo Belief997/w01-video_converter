@@ -279,6 +279,103 @@ describe('VideoParser', () => {
       await expect(parser.parse('/path/to/invalid.mp4')).rejects.toThrow(VideoFormatError);
       await expect(parser.parse('/path/to/invalid.mp4')).rejects.toThrow('无效的帧数');
     });
+
+    describe('GIF input handling', () => {
+      it('should derive frame rate from nb_frames/duration when avg_frame_rate is "0/0" and r_frame_rate is bogus "100/1"', async () => {
+        mockExistsSync.mockReturnValue(true);
+
+        const ffprobeOutput = {
+          streams: [{
+            codec_type: 'video',
+            codec_name: 'gif',
+            width: 320,
+            height: 240,
+            avg_frame_rate: '0/0',
+            r_frame_rate: '100/1',  // GIF centisecond-based bogus value
+            nb_frames: '30',
+            duration: '3.0'
+          }],
+          format: { duration: '3.0' }
+        };
+
+        mockExecFileSuccess(JSON.stringify(ffprobeOutput));
+
+        const info = await parser.parse('/path/to/animation.gif');
+        expect(info.frameRate).toBeCloseTo(10, 5);  // 30 / 3.0
+        expect(info.frameCount).toBe(30);
+        expect(info.codec).toBe('gif');
+        expect(info.width).toBe(320);
+        expect(info.height).toBe(240);
+      });
+
+      it('should derive frame rate from nb_frames/duration when avg_frame_rate is absent', async () => {
+        mockExistsSync.mockReturnValue(true);
+
+        const ffprobeOutput = {
+          streams: [{
+            codec_type: 'video',
+            codec_name: 'gif',
+            width: 200,
+            height: 150,
+            r_frame_rate: '100/1',
+            nb_frames: '50',
+            duration: '5.0'
+          }],
+          format: { duration: '5.0' }
+        };
+
+        mockExecFileSuccess(JSON.stringify(ffprobeOutput));
+
+        const info = await parser.parse('/path/to/animation.gif');
+        expect(info.frameRate).toBeCloseTo(10, 5);  // 50 / 5.0
+        expect(info.frameCount).toBe(50);
+      });
+
+      it('should use valid avg_frame_rate when present for GIF', async () => {
+        mockExistsSync.mockReturnValue(true);
+
+        const ffprobeOutput = {
+          streams: [{
+            codec_type: 'video',
+            codec_name: 'gif',
+            width: 480,
+            height: 270,
+            avg_frame_rate: '25/1',
+            r_frame_rate: '100/1',
+            nb_frames: '250',
+            duration: '10.0'
+          }],
+          format: { duration: '10.0' }
+        };
+
+        mockExecFileSuccess(JSON.stringify(ffprobeOutput));
+
+        const info = await parser.parse('/path/to/animation.gif');
+        expect(info.frameRate).toBe(25);  // Should use avg_frame_rate when valid
+        expect(info.frameCount).toBe(250);
+      });
+
+      it('should throw VideoFormatError for GIF with no usable frame rate metadata', async () => {
+        mockExistsSync.mockReturnValue(true);
+
+        const ffprobeOutput = {
+          streams: [{
+            codec_type: 'video',
+            codec_name: 'gif',
+            width: 100,
+            height: 100,
+            avg_frame_rate: '0/0',
+            r_frame_rate: '100/1',
+            // No nb_frames, no duration
+          }],
+          format: {}
+        };
+
+        mockExecFileSuccess(JSON.stringify(ffprobeOutput));
+
+        await expect(parser.parse('/path/to/bad.gif')).rejects.toThrow(VideoFormatError);
+      });
+    });
   });
 
   describe('parseFrameRate()', () => {
