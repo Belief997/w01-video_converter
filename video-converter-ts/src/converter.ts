@@ -179,6 +179,8 @@ export class VideoConverter {
         return this.convertToMjpeg(inputPath, outputPath, videoInfo, targetFps, quality, backgroundColor);
       case OutputFormat.AVI_MJPEG:
         return this.convertToAviMjpeg(inputPath, outputPath, videoInfo, targetFps, quality, debug, backgroundColor);
+      case OutputFormat.AVI_MSV1:
+        return this.convertToAviMsv1(inputPath, outputPath, videoInfo, targetFps, quality, backgroundColor);
       case OutputFormat.H264:
         return this.convertToH264(inputPath, outputPath, videoInfo, targetFps, quality, backgroundColor);
       default:
@@ -280,6 +282,33 @@ export class VideoConverter {
         fs.unlinkSync(tempAvi);
       }
     }
+  }
+
+  /**
+   * Convert to AVI-MSV1 format (Microsoft Video 1 / CRAM codec)
+   *
+   * No post-processing: AviAligner is JPEG-specific and cannot be applied
+   * to MSV1 (RGB) frame data. FFmpeg output is the final file.
+   */
+  private async convertToAviMsv1(
+    inputPath: string,
+    outputPath: string,
+    videoInfo: VideoInfo,
+    targetFps: number,
+    quality: number,
+    backgroundColor?: string
+  ): Promise<ConversionResult> {
+    const cmd = this.builder.buildAviMsv1Cmd(inputPath, outputPath, targetFps, quality, backgroundColor);
+    await this.executor.execute(cmd, videoInfo.frameCount);
+    return {
+      success: true,
+      inputPath,
+      outputPath,
+      outputFormat: OutputFormat.AVI_MSV1,
+      frameCount: videoInfo.frameCount,
+      frameRate: targetFps,
+      quality
+    };
   }
 
   /**

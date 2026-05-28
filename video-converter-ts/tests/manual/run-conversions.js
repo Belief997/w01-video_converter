@@ -27,6 +27,9 @@
  *   - birds_15fps.avi             → AVI-MJPEG，限速 15fps
  *   - birds.mjpeg                 → MJPEG 裸流
  *   - birds.h264                  → H264 + 自定义 32 字节头
+ *   - birds_msv1.avi              → AVI-MSV1，默认质量
+ *   - birds_msv1_hq.avi           → AVI-MSV1，高质量（q=1）
+ *   - birds_msv1_15fps.avi        → AVI-MSV1，限速 15fps
  *
  *   [VideoConverter 转换（缩放后，scale 字段向后兼容）]
  *   - birds_scaled_w320.avi       → 缩小 320px 宽，再转 AVI-MJPEG
@@ -34,11 +37,14 @@
  *   - birds_scaled_w320.mjpeg     → 缩小 320px 宽，再转 MJPEG 裸流
  *   - birds_scaled_w320.h264      → 缩小 320px 宽，再转 H264
  *   - birds_scaled_w1280.avi      → 放大 1280px 宽，再转 AVI-MJPEG
+ *   - birds_msv1_scaled_w320.avi  → 缩小 320px 宽，再转 AVI-MSV1（验证尺寸对齐）
  *
  *   [VideoConverter 转换（preprocess pipeline）]
  *   - birds_crop320x180.avi       → 仅裁剪 320×180，再转 AVI-MJPEG
  *   - birds_scale_crop.avi        → 先缩放到 400px 宽，再裁剪 320×180，转 AVI-MJPEG
  *   - birds_crop_scale.avi        → 先裁剪 320×180，再缩放到 160px 宽，转 AVI-MJPEG
+ *   - birds_msv1_crop320x180.avi  → 仅裁剪 320×180，再转 AVI-MSV1
+ *   - birds_msv1_scale_crop.avi   → 先缩放 400px 宽，再裁剪 320×180，转 AVI-MSV1
  *
  * 验证方法（运行结束后）：
  *   ffplay  test-output/birds.avi                  # 原始 AVI 播放
@@ -229,6 +235,11 @@ async function runGifTasks() {
     { label: 'cat_02.gif → H264（黑色背景）',       file: 'cat_02_black.h264',  input: gifTransp, format: OutputFormat.H264,      options: { backgroundColor: 'black' } },
     { label: 'cat_02.gif → AVI-MJPEG（黑色背景）',  file: 'cat_02_black.avi',   input: gifTransp, format: OutputFormat.AVI_MJPEG, options: { backgroundColor: 'black' } },
     { label: 'cat_02.gif → MJPEG（黑色背景）',      file: 'cat_02_black.mjpeg', input: gifTransp, format: OutputFormat.MJPEG,     options: { backgroundColor: 'black' } },
+    // MSV1 — cat_00.gif（无透明）
+    { label: 'cat_00.gif → AVI-MSV1（无透明）',      file: 'cat_00_msv1.avi',         input: gifNormal, format: OutputFormat.AVI_MSV1,  options: {} },
+    // MSV1 — cat_02.gif（透明，白/黑背景）
+    { label: 'cat_02.gif → AVI-MSV1（白色背景）',    file: 'cat_02_msv1_white.avi',   input: gifTransp, format: OutputFormat.AVI_MSV1,  options: { backgroundColor: 'white' } },
+    { label: 'cat_02.gif → AVI-MSV1（黑色背景）',    file: 'cat_02_msv1_black.avi',   input: gifTransp, format: OutputFormat.AVI_MSV1,  options: { backgroundColor: 'black' } },
   ];
 
   const gifResults = [];
@@ -290,6 +301,30 @@ const tasks = [
     format: OutputFormat.H264,
     options: {},
   },
+  {
+    label: 'AVI-MSV1（默认质量）',
+    outputFile: `${inputName}_msv1.avi`,
+    format: OutputFormat.AVI_MSV1,
+    options: {},
+  },
+  {
+    label: 'AVI-MSV1（高质量 q=1）',
+    outputFile: `${inputName}_msv1_hq.avi`,
+    format: OutputFormat.AVI_MSV1,
+    options: { quality: 1 },
+  },
+  {
+    label: 'AVI-MSV1（限速 15fps）',
+    outputFile: `${inputName}_msv1_15fps.avi`,
+    format: OutputFormat.AVI_MSV1,
+    options: { frameRate: 15 },
+  },
+  {
+    label: 'AVI-MSV1（缩放 320px 宽）',
+    outputFile: `${inputName}_msv1_scaled_w320.avi`,
+    format: OutputFormat.AVI_MSV1,
+    options: { scale: { width: 320 } },
+  },
   // ── Scale + convert tasks ──────────────────────────────────────────────
   {
     label: 'AVI-MJPEG（缩放 320px 宽，保持宽高比）',
@@ -347,6 +382,24 @@ const tasks = [
       preprocess: [
         { type: 'crop',  options: { width: 320, height: 180 } },
         { type: 'scale', options: { width: 160 } },
+      ],
+    },
+  },
+  // ── AVI-MSV1 preprocess pipeline tasks ─────────────────────────────────
+  {
+    label: 'AVI-MSV1（仅裁剪 320×180，preprocess 单步）',
+    outputFile: `${inputName}_msv1_crop320x180.avi`,
+    format: OutputFormat.AVI_MSV1,
+    options: { preprocess: [{ type: 'crop', options: { width: 320, height: 180 } }] },
+  },
+  {
+    label: 'AVI-MSV1（先缩放 400px 宽，再裁剪 320×180）',
+    outputFile: `${inputName}_msv1_scale_crop.avi`,
+    format: OutputFormat.AVI_MSV1,
+    options: {
+      preprocess: [
+        { type: 'scale', options: { width: 400 } },
+        { type: 'crop',  options: { width: 320, height: 180 } },
       ],
     },
   },
@@ -459,6 +512,14 @@ console.log('   ffplay  test-output/cat_02_white.avi           # GIF 白色背�
 console.log('   ffplay  test-output/cat_02_black.avi           # GIF 黑色背景 AVI 播放');
 console.log('   ffplay  test-output/cat_02_white.h264          # GIF 白色背景 H264 播放');
 console.log('   ffplay  test-output/cat_02_black.h264          # GIF 黑色背景 H264 播放');
+console.log('   ffplay  test-output/birds_msv1.avi             # MSV1 默认质量播放');
+console.log('   ffplay  test-output/birds_msv1_hq.avi          # MSV1 高质量播放');
+console.log('   ffplay  test-output/birds_msv1_scaled_w320.avi # MSV1 缩放后播放');
+console.log('   ffplay  test-output/birds_msv1_crop320x180.avi # MSV1 裁剪后播放');
+console.log('   ffplay  test-output/birds_msv1_scale_crop.avi  # MSV1 缩放+裁剪后播放');
+console.log('   ffplay  test-output/cat_00_msv1.avi            # GIF MSV1（无透明）播放');
+console.log('   ffplay  test-output/cat_02_msv1_white.avi      # GIF MSV1 白色背景播放');
+console.log('   ffplay  test-output/cat_02_msv1_black.avi      # GIF MSV1 黑色背景播放');
 console.log('');
 
 const allResults = [...scalerResults, ...cropperResults, ...gifResults, ...results];

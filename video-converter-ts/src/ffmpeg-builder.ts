@@ -301,4 +301,64 @@ export class FFmpegBuilder {
 
     return cmd;
   }
+
+  /**
+   * Build AVI-MSV1 conversion command (Microsoft Video 1 / CRAM codec)
+   *
+   * The msvideo1 encoder only supports rgb555le pixel format.
+   * No audio (-an). No post-processing required (unlike AVI-MJPEG which needs
+   * JPEG-specific 8-byte alignment via AviAligner).
+   *
+   * Command format (no background):
+   * ffmpeg -i input.mp4 -an [-r fps] -vcodec msvideo1 -pix_fmt rgb555le -q:v 1 output.avi
+   *
+   * Command format (with background color for transparent GIF):
+   * ffmpeg -i input.gif -f lavfi -i "color=c=white"
+   *   -filter_complex "[1:v][0:v]scale2ref[bg][fg];[bg][fg]overlay=shortest=1:format=auto[out]"
+   *   -map "[out]" -an [-r fps] -vcodec msvideo1 -pix_fmt rgb555le -q:v 1 output.avi
+   *
+   * @param inputPath - Input video file path
+   * @param outputPath - Output AVI file path
+   * @param frameRate - Target frame rate, undefined to keep original
+   * @param quality - Quality (1-31, 1 is highest), defaults to 1
+   * @param backgroundColor - Optional background color for transparent GIF (FFmpeg color value)
+   * @returns FFmpeg command arguments array
+   */
+  buildAviMsv1Cmd(
+    inputPath: string,
+    outputPath: string,
+    frameRate?: number,
+    quality: number = 1,
+    backgroundColor?: string
+  ): string[] {
+    /** MSV1 requires width and height to be multiples of 4 */
+    const msv1ScaleAlign = 'scale=trunc(iw/4)*4:trunc(ih/4)*4';
+
+    if (backgroundColor) {
+      const cmd: string[] = ['ffmpeg', '-i', inputPath];
+      cmd.push('-f', 'lavfi', '-i', `color=c=${backgroundColor}`);
+      cmd.push(
+        '-filter_complex',
+        `[1:v][0:v]scale2ref[bg][fg];[bg][fg]overlay=shortest=1:format=auto,${msv1ScaleAlign}[out]`
+      );
+      cmd.push('-map', '[out]');
+      cmd.push('-an');
+      if (frameRate !== undefined) cmd.push('-r', String(frameRate));
+      cmd.push('-vcodec', 'msvideo1');
+      cmd.push('-pix_fmt', 'rgb555le');
+      cmd.push('-q:v', String(quality));
+      cmd.push(outputPath);
+      return cmd;
+    }
+
+    const cmd: string[] = ['ffmpeg', '-i', inputPath];
+    cmd.push('-an');
+    if (frameRate !== undefined) cmd.push('-r', String(frameRate));
+    cmd.push('-vf', msv1ScaleAlign);
+    cmd.push('-vcodec', 'msvideo1');
+    cmd.push('-pix_fmt', 'rgb555le');
+    cmd.push('-q:v', String(quality));
+    cmd.push(outputPath);
+    return cmd;
+  }
 }

@@ -355,4 +355,115 @@ describe('FFmpegBuilder', () => {
       });
     });
   });
+
+  describe('buildAviMsv1Cmd', () => {
+    it('should build basic MSV1 AVI command', () => {
+      const cmd = builder.buildAviMsv1Cmd('/input/video.mp4', '/output/video.avi');
+
+      expect(cmd[0]).toBe('ffmpeg');
+      expect(cmd).toContain('-i');
+      expect(cmd).toContain('/input/video.mp4');
+      expect(cmd).toContain('-an');
+      expect(cmd).toContain('-vf');
+      expect(cmd[cmd.indexOf('-vf') + 1]).toContain('trunc(iw/4)*4');
+      expect(cmd).toContain('-vcodec');
+      expect(cmd[cmd.indexOf('-vcodec') + 1]).toBe('msvideo1');
+      expect(cmd).toContain('-pix_fmt');
+      expect(cmd[cmd.indexOf('-pix_fmt') + 1]).toBe('rgb555le');
+      expect(cmd).toContain('-q:v');
+      expect(cmd[cmd.indexOf('-q:v') + 1]).toBe('1'); // default quality
+      expect(cmd[cmd.length - 1]).toBe('/output/video.avi');
+    });
+
+    it('should include -r when frameRate is specified', () => {
+      const cmd = builder.buildAviMsv1Cmd('/input/video.mp4', '/output/video.avi', 15);
+
+      expect(cmd).toContain('-r');
+      expect(cmd[cmd.indexOf('-r') + 1]).toBe('15');
+    });
+
+    it('should omit -r when frameRate is undefined', () => {
+      const cmd = builder.buildAviMsv1Cmd('/input/video.mp4', '/output/video.avi', undefined);
+
+      expect(cmd).not.toContain('-r');
+    });
+
+    it('should use custom quality value', () => {
+      const cmd = builder.buildAviMsv1Cmd('/input/video.mp4', '/output/video.avi', undefined, 10);
+
+      expect(cmd[cmd.indexOf('-q:v') + 1]).toBe('10');
+    });
+
+    it('should not use filter_complex when no backgroundColor', () => {
+      const cmd = builder.buildAviMsv1Cmd('/input/video.mp4', '/output/video.avi');
+
+      expect(cmd).not.toContain('-filter_complex');
+      expect(cmd).not.toContain('lavfi');
+      // standard path uses -vf for dimension alignment
+      expect(cmd).toContain('-vf');
+    });
+
+    describe('buildAviMsv1Cmd with backgroundColor (GIF transparency)', () => {
+      it('should use filter_complex when backgroundColor is provided', () => {
+        const cmd = builder.buildAviMsv1Cmd('/input/animation.gif', '/output/video.avi', 10, 1, 'white');
+
+        expect(cmd).toContain('-filter_complex');
+        expect(cmd).not.toContain('-vf');
+      });
+
+      it('should include lavfi color source with the given color', () => {
+        const cmd = builder.buildAviMsv1Cmd('/input/animation.gif', '/output/video.avi', 10, 1, '#FF0000');
+
+        const lavfiIdx = cmd.indexOf('lavfi');
+        expect(lavfiIdx).toBeGreaterThan(-1);
+        // cmd layout: ... '-f', 'lavfi', '-i', 'color=c=#FF0000' ...
+        expect(cmd[lavfiIdx + 2]).toContain('#FF0000');
+      });
+
+      it('should include overlay=shortest=1 and msv1 scale alignment in filter_complex', () => {
+        const cmd = builder.buildAviMsv1Cmd('/input/animation.gif', '/output/video.avi', 10, 1, 'white');
+
+        const fcIdx = cmd.indexOf('-filter_complex');
+        const filterGraph = cmd[fcIdx + 1];
+        expect(filterGraph).toContain('overlay=shortest=1');
+        expect(filterGraph).toContain('trunc(iw/4)*4');
+      });
+
+      it('should include -map [out]', () => {
+        const cmd = builder.buildAviMsv1Cmd('/input/animation.gif', '/output/video.avi', 10, 1, 'white');
+
+        const mapIdx = cmd.indexOf('-map');
+        expect(mapIdx).toBeGreaterThan(-1);
+        expect(cmd[mapIdx + 1]).toBe('[out]');
+      });
+
+      it('should use msvideo1 codec and rgb555le pixel format with backgroundColor', () => {
+        const cmd = builder.buildAviMsv1Cmd('/input/animation.gif', '/output/video.avi', 10, 1, 'black');
+
+        expect(cmd).toContain('-an');
+        expect(cmd[cmd.indexOf('-vcodec') + 1]).toBe('msvideo1');
+        expect(cmd[cmd.indexOf('-pix_fmt') + 1]).toBe('rgb555le');
+      });
+
+      it('should include -r after -map when frameRate is set with backgroundColor', () => {
+        const cmd = builder.buildAviMsv1Cmd('/input/animation.gif', '/output/video.avi', 25, 1, 'white');
+
+        expect(cmd).toContain('-r');
+        // -r should appear after -map [out]
+        const mapIdx = cmd.indexOf('-map');
+        const rIdx = cmd.indexOf('-r');
+        expect(rIdx).toBeGreaterThan(mapIdx);
+      });
+
+      it('standard path should be unchanged when no backgroundColor', () => {
+        const cmd = builder.buildAviMsv1Cmd('/input/video.mp4', '/output/video.avi', 24, 5);
+
+        expect(cmd).not.toContain('-filter_complex');
+        expect(cmd).not.toContain('lavfi');
+        expect(cmd[cmd.indexOf('-vcodec') + 1]).toBe('msvideo1');
+        expect(cmd[cmd.indexOf('-pix_fmt') + 1]).toBe('rgb555le');
+        expect(cmd).toContain('-vf');
+      });
+    });
+  });
 });

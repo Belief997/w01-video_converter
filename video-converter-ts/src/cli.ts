@@ -20,7 +20,7 @@ import { VideoConverterError } from './errors.js';
 interface CliArgs {
   input: string;
   output?: string;
-  format?: 'mjpeg' | 'avi_mjpeg' | 'h264';
+  format?: 'mjpeg' | 'avi_mjpeg' | 'avi_msv1' | 'h264';
   framerate?: number;
   quality?: number;
   info?: boolean;
@@ -77,10 +77,10 @@ function parseArgs(args?: string[]): CliArgs {
   
   program
     .name('video-converter')
-    .description('视频转换工具 - 将视频转换为 MJPEG、AVI-MJPEG 或 H264 格式')
+    .description('视频转换工具 - 将视频转换为 MJPEG、AVI-MJPEG、AVI-MSV1 或 H264 格式')
     .requiredOption('-i, --input <path>', '输入视频文件路径')
     .option('-o, --output <path>', '输出文件路径（使用 --info 时可省略）')
-    .option('-f, --format <format>', '输出格式: mjpeg, avi_mjpeg, h264')
+    .option('-f, --format <format>', '输出格式: mjpeg, avi_mjpeg, avi_msv1, h264')
     .option('-r, --framerate <fps>', '目标帧率（默认保持原帧率）', parseFloat)
     .option('-q, --quality <value>', '编码质量: MJPEG/AVI 为 1-31（1最高质量），H264 为 CRF 值 0-51', parseInt)
     .option('--info', '仅显示输入视频信息，不进行转换')
@@ -129,7 +129,7 @@ export async function main(args?: string[]): Promise<number> {
       console.error('错误: 需要指定输出格式 (-f/--format)');
       return 1;
     }
-    if (!['mjpeg', 'avi_mjpeg', 'h264'].includes(parsedArgs.format)) {
+    if (!['mjpeg', 'avi_mjpeg', 'avi_msv1', 'h264'].includes(parsedArgs.format)) {
       console.error(`错误: 无效的输出格式: ${parsedArgs.format}`);
       return 1;
     }
@@ -151,6 +151,7 @@ export async function main(args?: string[]): Promise<number> {
     const formatMap: Record<string, OutputFormat> = {
       'mjpeg': OutputFormat.MJPEG,
       'avi_mjpeg': OutputFormat.AVI_MJPEG,
+      'avi_msv1': OutputFormat.AVI_MSV1,
       'h264': OutputFormat.H264
     };
     const outputFormat = formatMap[parsedArgs.format!] as OutputFormat;
