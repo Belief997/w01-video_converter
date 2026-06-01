@@ -236,10 +236,15 @@ async function runGifTasks() {
     { label: 'cat_02.gif → AVI-MJPEG（黑色背景）',  file: 'cat_02_black.avi',   input: gifTransp, format: OutputFormat.AVI_MJPEG, options: { backgroundColor: 'black' } },
     { label: 'cat_02.gif → MJPEG（黑色背景）',      file: 'cat_02_black.mjpeg', input: gifTransp, format: OutputFormat.MJPEG,     options: { backgroundColor: 'black' } },
     // MSV1 — cat_00.gif（无透明）
-    { label: 'cat_00.gif → AVI-MSV1（无透明）',      file: 'cat_00_msv1.avi',         input: gifNormal, format: OutputFormat.AVI_MSV1,  options: {} },
+    { label: 'cat_00.gif → AVI-MSV1（无透明）',      file: 'cat_00_msv1.avi',         input: gifNormal, format: OutputFormat.AVI_MSV1,    options: {} },
     // MSV1 — cat_02.gif（透明，白/黑背景）
-    { label: 'cat_02.gif → AVI-MSV1（白色背景）',    file: 'cat_02_msv1_white.avi',   input: gifTransp, format: OutputFormat.AVI_MSV1,  options: { backgroundColor: 'white' } },
-    { label: 'cat_02.gif → AVI-MSV1（黑色背景）',    file: 'cat_02_msv1_black.avi',   input: gifTransp, format: OutputFormat.AVI_MSV1,  options: { backgroundColor: 'black' } },
+    { label: 'cat_02.gif → AVI-MSV1（白色背景）',    file: 'cat_02_msv1_white.avi',   input: gifTransp, format: OutputFormat.AVI_MSV1,    options: { backgroundColor: 'white' } },
+    { label: 'cat_02.gif → AVI-MSV1（黑色背景）',    file: 'cat_02_msv1_black.avi',   input: gifTransp, format: OutputFormat.AVI_MSV1,    options: { backgroundColor: 'black' } },
+    // Cinepak — cat_00.gif（无透明）
+    { label: 'cat_00.gif → AVI-Cinepak（无透明）',   file: 'cat_00_cinepak.avi',      input: gifNormal, format: OutputFormat.AVI_CINEPAK, options: {} },
+    // Cinepak — cat_02.gif（透明，白/黑背景）
+    { label: 'cat_02.gif → AVI-Cinepak（白色背景）', file: 'cat_02_cinepak_white.avi', input: gifTransp, format: OutputFormat.AVI_CINEPAK, options: { backgroundColor: 'white' } },
+    { label: 'cat_02.gif → AVI-Cinepak（黑色背景）', file: 'cat_02_cinepak_black.avi', input: gifTransp, format: OutputFormat.AVI_CINEPAK, options: { backgroundColor: 'black' } },
   ];
 
   const gifResults = [];
@@ -403,6 +408,31 @@ const tasks = [
       ],
     },
   },
+  // ── AVI-Cinepak tasks ──────────────────────────────────────────────────
+  {
+    label: 'AVI-Cinepak（默认质量）',
+    outputFile: `${inputName}_cinepak.avi`,
+    format: OutputFormat.AVI_CINEPAK,
+    options: {},
+  },
+  {
+    label: 'AVI-Cinepak（高质量 q=1）',
+    outputFile: `${inputName}_cinepak_hq.avi`,
+    format: OutputFormat.AVI_CINEPAK,
+    options: { quality: 1 },
+  },
+  {
+    label: 'AVI-Cinepak（限速 15fps）',
+    outputFile: `${inputName}_cinepak_15fps.avi`,
+    format: OutputFormat.AVI_CINEPAK,
+    options: { frameRate: 15 },
+  },
+  {
+    label: 'AVI-Cinepak（缩放 320px 宽）',
+    outputFile: `${inputName}_cinepak_scaled_w320.avi`,
+    format: OutputFormat.AVI_CINEPAK,
+    options: { scale: { width: 320 } },
+  },
 ];
 
 // ─── 主流程 ───────────────────────────────────────────────────────────────
@@ -520,6 +550,12 @@ console.log('   ffplay  test-output/birds_msv1_scale_crop.avi  # MSV1 缩放+裁
 console.log('   ffplay  test-output/cat_00_msv1.avi            # GIF MSV1（无透明）播放');
 console.log('   ffplay  test-output/cat_02_msv1_white.avi      # GIF MSV1 白色背景播放');
 console.log('   ffplay  test-output/cat_02_msv1_black.avi      # GIF MSV1 黑色背景播放');
+console.log('   ffplay  test-output/birds_cinepak.avi          # Cinepak 默认质量播放');
+console.log('   ffplay  test-output/birds_cinepak_hq.avi       # Cinepak 高质量播放');
+console.log('   ffplay  test-output/birds_cinepak_15fps.avi    # Cinepak 限速播放');
+console.log('   ffplay  test-output/cat_00_cinepak.avi         # GIF Cinepak（无透明）播放');
+console.log('   ffplay  test-output/cat_02_cinepak_white.avi   # GIF Cinepak 白色背景播放');
+console.log('   ffplay  test-output/cat_02_cinepak_black.avi   # GIF Cinepak 黑色背景播放');
 console.log('');
 
 const allResults = [...scalerResults, ...cropperResults, ...gifResults, ...results];

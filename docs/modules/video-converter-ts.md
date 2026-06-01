@@ -13,6 +13,8 @@
 - **MJPEG** — 连续 JPEG 帧流
 - **AVI-MJPEG** — AVI 容器，帧数据 8 字节对齐
 - **H264** — 带自定义 32 字节头部的 H264 裸流
+- **AVI-MSV1** — AVI 容器，Microsoft Video 1 编码（宽高需为 4 的倍数）
+- **AVI-Cinepak** — AVI 容器，Cinepak 编码，支持 GIF 透明背景合成（宽高需为 4 的倍数）
 
 ---
 
@@ -48,7 +50,7 @@ node dist/cli.js -i ../test_video/birds.mp4 -o output.h264 -f h264 -q 23
 |------|------|------|
 | `--input` | `-i` | 输入视频文件路径（必需） |
 | `--output` | `-o` | 输出文件路径（必需） |
-| `--format` | `-f` | `mjpeg` / `avi_mjpeg` / `h264`（必需） |
+| `--format` | `-f` | `mjpeg` / `avi_mjpeg` / `h264` / `avi_msv1` / `avi_cinepak`（必需） |
 | `--fps` | `-r` | 目标帧率（可选） |
 | `--quality` | `-q` | 质量参数（可选） |
 | `--verbose` | `-v` | 显示详细信息 |

@@ -1,6 +1,6 @@
 {
   "name": "@belief997/video-converter",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Video converter with MJPEG, AVI-MJPEG, H264, and AVI-MSV1 output formats. Supports 8-byte frame alignment for AVI files.",
   "type": "module",
   "main": "dist/index.js",
