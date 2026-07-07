@@ -4,7 +4,7 @@
  * 端到端测试，验证实际 FFmpeg 转换流程及二进制头部格式正确性。
  * 运行前请确保：
  *   1. FFmpeg 已安装（ffmpeg -version）
- *   2. 测试图片存在：../../test_image/ac_cold.png（相对于本文件）
+ *   2. 测试图片存在：../../../test_image/ac_cold.png（相对于本文件）
  *
  * 运行方式（在 image-to-jpeg-converter/ 目录下）：
  *   npm test -- --run tests/functional/functional.test.ts
@@ -21,7 +21,7 @@ import { mkdtempSync, rmSync } from 'fs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // 测试图片路径（相对于仓库根目录）
-const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
+const REPO_ROOT = join(__dirname, '..', '..', '..');
 const TEST_IMAGE = join(REPO_ROOT, 'test_image', 'ac_cold.png');
 
 // 检查 FFmpeg 是否可用

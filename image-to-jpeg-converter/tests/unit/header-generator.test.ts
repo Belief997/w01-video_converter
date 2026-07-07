@@ -46,18 +46,20 @@ describe('HeaderGenerator', () => {
       expect(header.compress).toBe(0);
     });
 
-    it('should set resize option correctly', () => {
+    it('should force resize to 0 regardless of config (spec_v4)', () => {
       const generator = new HeaderGenerator();
 
-      // Test all resize options (Requirement 4.6)
+      // spec_v4.txt: gui_rgb_data_head_t only fills type/w/h; all bit fields
+      // (resize included) are forced to 0 regardless of the requested option.
+      // The `resize` config field is deprecated and kept only for API compat.
       const resizeOptions = [
-        { option: ResizeOption.None, expected: 0 },
-        { option: ResizeOption.Fifty, expected: 1 },
-        { option: ResizeOption.Seventy, expected: 2 },
-        { option: ResizeOption.Eighty, expected: 3 },
+        ResizeOption.None,
+        ResizeOption.Fifty,
+        ResizeOption.Seventy,
+        ResizeOption.Eighty,
       ];
 
-      resizeOptions.forEach(({ option, expected }) => {
+      resizeOptions.forEach((option) => {
         const config: ConversionConfig = {
           inputPath: 'test.png',
           outputPath: 'test.jpg',
@@ -66,14 +68,15 @@ describe('HeaderGenerator', () => {
         };
 
         const header = generator.generateRgbHeader(100, 100, config);
-        expect(header.resize).toBe(expected);
+        expect(header.resize).toBe(0);
       });
     });
 
-    it('should set compress flag correctly', () => {
+    it('should force compress to 0 regardless of config (spec_v4)', () => {
       const generator = new HeaderGenerator();
 
-      // Test compress disabled (Requirement 4.7)
+      // spec_v4.txt: compress is forced to 0 even when the caller enables it.
+      // The `compress` config field is deprecated and kept only for API compat.
       const configNoCompress: ConversionConfig = {
         inputPath: 'test.png',
         outputPath: 'test.jpg',
@@ -84,7 +87,6 @@ describe('HeaderGenerator', () => {
       const headerNoCompress = generator.generateRgbHeader(100, 100, configNoCompress);
       expect(headerNoCompress.compress).toBe(0);
 
-      // Test compress enabled (Requirement 4.7)
       const configCompress: ConversionConfig = {
         inputPath: 'test.png',
         outputPath: 'test.jpg',
@@ -93,7 +95,7 @@ describe('HeaderGenerator', () => {
       };
 
       const headerCompress = generator.generateRgbHeader(100, 100, configCompress);
-      expect(headerCompress.compress).toBe(1);
+      expect(headerCompress.compress).toBe(0);
     });
 
     it('should handle various image dimensions', () => {
@@ -120,7 +122,7 @@ describe('HeaderGenerator', () => {
       expect(large.h).toBe(4096);
     });
 
-    it('should set custom version if provided', () => {
+    it('should force version to 0 regardless of config (spec_v4)', () => {
       const generator = new HeaderGenerator();
       const config: ConversionConfig = {
         inputPath: 'test.png',
@@ -129,8 +131,10 @@ describe('HeaderGenerator', () => {
         version: 5,
       };
 
+      // spec_v4.txt: version is forced to 0 even when provided in config.
+      // The `version` config field is deprecated and kept only for API compat.
       const header = generator.generateRgbHeader(100, 100, config);
-      expect(header.version).toBe(5);
+      expect(header.version).toBe(0);
     });
   });
 
@@ -229,8 +233,8 @@ describe('HeaderGenerator', () => {
 
       const encoded = generator.encodeToBytes(jpegHeader);
 
-      // Total size should be 16 (header) + JPEG data length
-      expect(encoded.length).toBe(16 + jpegData.length);
+      // Header is exactly 16 bytes; JPEG data is appended separately by FileAssembler
+      expect(encoded.length).toBe(16);
 
       // Verify RGB header is exactly 8 bytes (Requirement 4.1)
       // Byte 0: bit fields
@@ -241,14 +245,14 @@ describe('HeaderGenerator', () => {
       // Byte 7: rsvd2
     });
 
-    it('should encode bit fields correctly in byte 0', () => {
+    it('should encode byte 0 as 0 (all bit fields forced to 0, spec_v4)', () => {
       const generator = new HeaderGenerator();
       const config: ConversionConfig = {
         inputPath: 'test.png',
         outputPath: 'test.jpg',
         samplingFactor: SamplingFactor.YUV420,
-        resize: ResizeOption.Fifty, // 1 in bits 2-3
-        compress: true, // 1 in bit 4
+        resize: ResizeOption.Fifty, // ignored per spec_v4 (deprecated)
+        compress: true, // ignored per spec_v4 (deprecated)
       };
 
       const rgbHeader = generator.generateRgbHeader(72, 72, config);
@@ -257,16 +261,9 @@ describe('HeaderGenerator', () => {
 
       const encoded = generator.encodeToBytes(jpegHeader);
 
-      // Byte 0 should have:
-      // Bit 0: scan = 0
-      // Bit 1: align = 0
-      // Bits 2-3: resize = 1 (binary: 01)
-      // Bit 4: compress = 1
-      // Bit 5: jpeg = 0
-      // Bit 6: idu = 0
-      // Bit 7: rsvd = 0
-      // Binary: 0001 0100 = 0x14
-      expect(encoded[0]).toBe(0x14);
+      // spec_v4.txt: scan/align/resize/compress/jpeg/idu/rsvd are all forced to 0,
+      // so byte 0 is always 0x00 regardless of the resize/compress config.
+      expect(encoded[0]).toBe(0x00);
     });
 
     it('should encode type field correctly in byte 1', () => {
@@ -311,7 +308,7 @@ describe('HeaderGenerator', () => {
       expect(encoded[5]).toBe(0x00);
     });
 
-    it('should encode version and reserved fields', () => {
+    it('should encode version and reserved fields as 0 (spec_v4)', () => {
       const generator = new HeaderGenerator();
       const config: ConversionConfig = {
         inputPath: 'test.png',
@@ -326,8 +323,9 @@ describe('HeaderGenerator', () => {
 
       const encoded = generator.encodeToBytes(jpegHeader);
 
-      // Byte 6: version = 3
-      expect(encoded[6]).toBe(3);
+      // spec_v4.txt: version is forced to 0 even when provided in config.
+      // Byte 6: version = 0
+      expect(encoded[6]).toBe(0);
 
       // Byte 7: rsvd2 = 0 (Requirement 4.8)
       expect(encoded[7]).toBe(0);
@@ -379,7 +377,7 @@ describe('HeaderGenerator', () => {
       expect(encoded[15]).toBe(0x00);
     });
 
-    it('should include JPEG data after header', () => {
+    it('should NOT include JPEG data (header is 16 bytes only)', () => {
       const generator = new HeaderGenerator();
       const config: ConversionConfig = {
         inputPath: 'test.png',
@@ -393,11 +391,10 @@ describe('HeaderGenerator', () => {
 
       const encoded = generator.encodeToBytes(jpegHeader);
 
-      // JPEG data should start at byte 16 (Requirement 6.2)
-      expect(encoded[16]).toBe(0xff);
-      expect(encoded[17]).toBe(0xd8);
-      expect(encoded[18]).toBe(0xff);
-      expect(encoded[19]).toBe(0xe0);
+      // encodeToBytes produces ONLY the 16-byte header. FileAssembler appends the
+      // JPEG payload exactly once, so the JPEG must NOT appear in the encoded header
+      // (otherwise it would be written twice in the final file).
+      expect(encoded.length).toBe(16);
     });
 
     it('should match the example output format', () => {
@@ -419,8 +416,10 @@ describe('HeaderGenerator', () => {
       const jpegHeader = generator.generateJpegHeader(rgbHeader, jpegData);
       const encoded = generator.encodeToBytes(jpegHeader);
 
-      // Verify header matches example:
-      // 00 0c 48 00 48 00 00 00 05 07 00 00 00 00 00 00 ff d8 ff e0 ...
+      // Verify the 16-byte header matches the example. In the assembled file the
+      // JPEG (ff d8 ff e0 ...) follows these 16 bytes, but encodeToBytes returns
+      // the header only:
+      // 00 0c 48 00 48 00 00 00 05 07 00 00 00 00 00 00
       expect(encoded[0]).toBe(0x00); // bit fields (all 0)
       expect(encoded[1]).toBe(0x0c); // type = 12
       expect(encoded[2]).toBe(0x48); // width low byte
@@ -437,10 +436,9 @@ describe('HeaderGenerator', () => {
       expect(encoded[13]).toBe(0x00); // dummy
       expect(encoded[14]).toBe(0x00); // dummy
       expect(encoded[15]).toBe(0x00); // dummy
-      expect(encoded[16]).toBe(0xff); // JPEG SOI
-      expect(encoded[17]).toBe(0xd8); // JPEG SOI
-      expect(encoded[18]).toBe(0xff); // JPEG marker
-      expect(encoded[19]).toBe(0xe0); // JPEG marker
+
+      // Header only: encodeToBytes emits exactly 16 bytes, no JPEG payload.
+      expect(encoded.length).toBe(16);
     });
   });
 

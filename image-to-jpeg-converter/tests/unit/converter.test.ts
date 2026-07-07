@@ -106,7 +106,7 @@ describe('Converter', () => {
       }
     });
 
-    it('should handle resize options', async () => {
+    it('should force resize field to 0 in header regardless of config (spec_v4)', async () => {
       if (!fs.existsSync(testInputPath)) {
         console.warn('Test image not found, skipping test');
         return;
@@ -125,14 +125,15 @@ describe('Converter', () => {
       expect(result.success).toBe(true);
       expect(fs.existsSync(outputPath)).toBe(true);
 
-      // Verify resize field in header (byte 0, bits 2-3)
+      // spec_v4.txt: resize is forced to 0, so byte 0 bits 2-3 are always 0
+      // even when the caller requests a resize option (deprecated field).
       const fileData = fs.readFileSync(outputPath);
       const byte0 = fileData[0];
       const resizeField = (byte0 >> 2) & 0x03;
-      expect(resizeField).toBe(ResizeOption.Fifty);
+      expect(resizeField).toBe(0);
     });
 
-    it('should handle compress flag', async () => {
+    it('should force compress bit to 0 in header regardless of config (spec_v4)', async () => {
       if (!fs.existsSync(testInputPath)) {
         console.warn('Test image not found, skipping test');
         return;
@@ -151,11 +152,12 @@ describe('Converter', () => {
       expect(result.success).toBe(true);
       expect(fs.existsSync(outputPath)).toBe(true);
 
-      // Verify compress bit in header (byte 0, bit 4)
+      // spec_v4.txt: compress is forced to 0, so byte 0 bit 4 is always 0
+      // even when the caller enables compression (deprecated field).
       const fileData = fs.readFileSync(outputPath);
       const byte0 = fileData[0];
       const compressBit = (byte0 >> 4) & 0x01;
-      expect(compressBit).toBe(1);
+      expect(compressBit).toBe(0);
     });
 
     it('should throw validation error for non-existent input file', async () => {
