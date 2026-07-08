@@ -4,7 +4,7 @@
  * Tests the main orchestration logic, error handling, and cleanup behavior.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Converter } from '../../src/converter.js';
@@ -232,9 +232,11 @@ describe('Converter', () => {
 
       const outputPath = path.join(testOutputDir, 'output-cleanup.jpg');
 
-      // Get temp directory before conversion
-      const tempDir = require('os').tmpdir();
-      const beforeFiles = fs.readdirSync(tempDir);
+      // Spy on unlink (calls through) so the assertion is deterministic and
+      // does NOT scan the shared os.tmpdir() — parallel test workers create
+      // their own `image-to-jpeg-*` temp files there, which previously made
+      // this count-based check flaky.
+      const unlinkSpy = vi.spyOn(fs.promises, 'unlink');
 
       await converter.convert({
         inputPath: testInputPath,
@@ -243,13 +245,18 @@ describe('Converter', () => {
         quality: 10,
       });
 
-      // Check that no new temp files remain
-      const afterFiles = fs.readdirSync(tempDir);
-      const newTempFiles = afterFiles.filter(
-        (file) => file.startsWith('image-to-jpeg-') && !beforeFiles.includes(file)
-      );
+      // The converter must delete its own temp JPEG (image-to-jpeg-*.jpg) …
+      const cleanedTempPaths = unlinkSpy.mock.calls
+        .map((call) => String(call[0]))
+        .filter((p) => p.includes('image-to-jpeg-'));
+      expect(cleanedTempPaths.length).toBeGreaterThan(0);
 
-      expect(newTempFiles.length).toBe(0);
+      // … and none of those temp files may remain on disk afterwards.
+      for (const tempPath of cleanedTempPaths) {
+        expect(fs.existsSync(tempPath)).toBe(false);
+      }
+
+      unlinkSpy.mockRestore();
     });
 
     it('should encode dimensions correctly in header', async () => {

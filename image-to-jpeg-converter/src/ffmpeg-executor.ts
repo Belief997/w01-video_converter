@@ -62,6 +62,10 @@ export class FFmpegExecutor {
    * 
    * @param config - Conversion configuration with input path, sampling factor, and quality
    * @param tempOutputPath - Path where FFmpeg should write the output JPEG file
+   * @param alignTo - Optional coded (SOF) target size. When provided, a `pad`
+   *   filter is inserted so the encoded JPEG and its SOF marker use these
+   *   dimensions. The target may be non-MCU (min padding with `align` off) or
+   *   MCU-aligned (`align` on) — this method just pads to whatever it is given.
    * @returns Promise resolving to FFmpegResult with JPEG data, or rejecting with FFmpegError
    * 
    * @example
@@ -79,17 +83,22 @@ export class FFmpegExecutor {
    */
   async convert(
     config: ConversionConfig,
-    tempOutputPath: string
+    tempOutputPath: string,
+    alignTo?: { width: number; height: number }
   ): Promise<FFmpegResult> {
     // Build FFmpeg command (Requirement 7.1)
-    const command = this.buildCommand(config, tempOutputPath);
+    const command = this.buildCommand(config, tempOutputPath, alignTo);
 
     try {
       // Execute FFmpeg process (Requirement 7.2)
       await this.executeFFmpeg(command);
 
-      // Validate output file exists (Requirement 7.5)
-      if (!fs.existsSync(tempOutputPath)) {
+      // Validate output file exists (Requirement 7.5). FFmpeg has reported
+      // exit 0, but on Windows the file it just wrote can briefly be invisible
+      // to this process (filesystem flush lag, pronounced under parallel I/O).
+      // Retry for a short bounded window before declaring failure so a
+      // successful conversion is not misreported as "output not created".
+      if (!(await this.waitForFile(tempOutputPath))) {
         throw {
           message: `FFmpeg completed but output file was not created: ${tempOutputPath}`,
           exitCode: 0,
@@ -124,6 +133,119 @@ export class FFmpegExecutor {
   }
 
   /**
+   * Waits briefly for a file to become visible on disk.
+   *
+   * FFmpeg signals completion via its process `close` event, but on Windows the
+   * output file it just wrote can lag a few milliseconds before `fs.existsSync`
+   * sees it — especially when many conversions run in parallel. This polls a
+   * bounded number of times so a genuinely successful conversion is not
+   * misreported as "output file was not created". The common case (file already
+   * present) returns immediately on the first check with no delay.
+   *
+   * @param filePath - Path to wait for
+   * @param attempts - Maximum number of checks (default 20)
+   * @param delayMs - Delay between checks in milliseconds (default 25 → ~500ms budget)
+   * @returns Promise resolving to true if the file appeared within the budget
+   */
+  private async waitForFile(
+    filePath: string,
+    attempts = 20,
+    delayMs = 25
+  ): Promise<boolean> {
+    for (let i = 0; i < attempts; i++) {
+      if (fs.existsSync(filePath)) {
+        return true;
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+    }
+    return fs.existsSync(filePath);
+  }
+
+  /**
+   * Reads the original pixel dimensions of an input image using ffprobe.
+   *
+   * Used when MCU alignment is enabled: the JPEG gets padded to aligned
+   * dimensions, so the ORIGINAL size (needed for the GUI header) must be read
+   * from the source rather than from the padded JPEG SOF marker. Requires
+   * ffprobe, which ships with FFmpeg.
+   *
+   * @param inputPath - Path to the input image file
+   * @returns Promise resolving to the original { width, height }
+   * @throws FFmpegError if ffprobe is missing, exits non-zero, or output is unparseable
+   */
+  async probeDimensions(
+    inputPath: string
+  ): Promise<{ width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+      const args = [
+        '-v', 'error',
+        '-select_streams', 'v:0',
+        '-show_entries', 'stream=width,height',
+        '-of', 'csv=p=0:s=x',
+        inputPath,
+      ];
+
+      const ffprobeProcess = spawn('ffprobe', args, {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      ffprobeProcess.stdout?.on('data', (data: Buffer) => {
+        stdout += data.toString();
+      });
+
+      ffprobeProcess.stderr?.on('data', (data: Buffer) => {
+        stderr += data.toString();
+      });
+
+      ffprobeProcess.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') {
+          reject({
+            message:
+              'ffprobe is not installed or not found in PATH. It is required when align=true and ships with FFmpeg.',
+            stderr: error.message,
+          } as FFmpegError);
+        } else {
+          reject({
+            message: `Failed to execute ffprobe: ${error.message}`,
+            stderr: error.message,
+          } as FFmpegError);
+        }
+      });
+
+      ffprobeProcess.on('close', (exitCode: number | null) => {
+        if (exitCode !== 0) {
+          reject({
+            message: `ffprobe exited with code ${exitCode ?? 'unknown'}`,
+            exitCode: exitCode ?? undefined,
+            stderr,
+          } as FFmpegError);
+          return;
+        }
+
+        // Output looks like "686x686" (first video stream, width x height).
+        const match = /^(\d+)x(\d+)/.exec(stdout.trim());
+        const widthStr = match?.[1];
+        const heightStr = match?.[2];
+        if (!widthStr || !heightStr) {
+          reject({
+            message: `Failed to parse ffprobe dimensions from output: "${stdout.trim()}"`,
+            stderr,
+          } as FFmpegError);
+          return;
+        }
+
+        resolve({
+          width: parseInt(widthStr, 10),
+          height: parseInt(heightStr, 10),
+        });
+      });
+    });
+  }
+
+  /**
    * Builds the FFmpeg command with appropriate parameters.
    * 
    * Constructs a command array with:
@@ -143,8 +265,15 @@ export class FFmpegExecutor {
    * - 422 → yuvj422p (4:2:2 subsampling)
    * - 444 → yuvj444p (4:4:4 subsampling, no subsampling)
    * 
+   * When `alignTo` is provided, a `pad` filter grows the frame to the given
+   * coded (SOF) dimensions with black fill on the right/bottom, so the encoded
+   * JPEG's SOF marker reports that size. The target is the caller's computed
+   * SOF size — MCU-aligned when `align` is on, or the exact (possibly non-MCU)
+   * content size when only `min` padding is in effect.
+   *
    * @param config - Conversion configuration
    * @param outputPath - Path where FFmpeg should write the output
+   * @param alignTo - Optional coded (SOF) target size to pad the frame up to
    * @returns Array of command arguments for FFmpeg
    * 
    * @example
@@ -156,12 +285,24 @@ export class FFmpegExecutor {
    * 
    * @see Requirements 2.1, 7.1, spec_v4.txt transparency handling
    */
-  buildCommand(config: ConversionConfig, outputPath: string): string[] {
+  buildCommand(
+    config: ConversionConfig,
+    outputPath: string,
+    alignTo?: { width: number; height: number }
+  ): string[] {
     // Map sampling factor to pixel format (Requirement 2.1)
     const pixelFormat = this.getPixelFormat(config.samplingFactor);
 
     // Get quality value (use provided or default)
     const quality = config.quality ?? this.getDefaultQuality(config.samplingFactor);
+
+    // Build the pad filter when a coded (SOF) target is requested. Padding adds
+    // pixels on the right/bottom only (x=0, y=0) so existing content keeps its
+    // top-left origin; the extra pixels lie outside the GUI header's reported
+    // size. The target may be non-MCU (min padding, `align` off) or MCU-aligned.
+    const padFilter = alignTo
+      ? `pad=${alignTo.width}:${alignTo.height}:0:0:black`
+      : null;
 
     // Check if input might have transparency (PNG, WEBP, etc.)
     const hasTransparency = this.mightHaveTransparency(config.inputPath);
@@ -169,13 +310,19 @@ export class FFmpegExecutor {
     if (hasTransparency) {
       // Handle transparency with background color (spec_v4.txt)
       const backgroundColor = config.backgroundColor || 'black';
+
+      // Composite the input over the background. When padding, chain the pad
+      // filter onto the overlay output and label it '[out]' so it can be mapped.
+      const overlay = '[1:v][0:v]scale2ref[bg][fg];[bg][fg]overlay=format=auto';
+      const filterComplex = padFilter ? `${overlay},${padFilter}[out]` : overlay;
       
       const command = [
         'ffmpeg',
         '-i', config.inputPath,                    // Input file
         '-f', 'lavfi',                             // Lavfi input for background
         '-i', `color=${backgroundColor}`,          // Background color
-        '-filter_complex', '[1:v][0:v]scale2ref[bg][fg];[bg][fg]overlay=format=auto', // Composite filter
+        '-filter_complex', filterComplex,          // Composite (+ optional pad) filter
+        ...(padFilter ? ['-map', '[out]'] : []),   // Map the labeled pad output
         '-c:v', 'mjpeg',                          // MJPEG codec
         '-pix_fmt', pixelFormat,                  // Pixel format based on sampling factor
         '-q:v', quality.toString(),               // Quality parameter
@@ -190,6 +337,7 @@ export class FFmpegExecutor {
       const command = [
         'ffmpeg',
         '-i', config.inputPath,           // Input file
+        ...(padFilter ? ['-vf', padFilter] : []), // Optional coded-size (SOF) padding
         '-pix_fmt', pixelFormat,          // Pixel format based on sampling factor
         '-q:v', quality.toString(),       // Quality parameter
         '-y',                             // Overwrite output file without asking

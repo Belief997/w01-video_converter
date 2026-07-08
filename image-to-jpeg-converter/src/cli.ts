@@ -38,6 +38,9 @@ interface CliArgs {
   quality?: string | undefined;
   resize?: string | undefined;
   compress?: boolean | undefined;
+  align?: boolean | undefined;
+  minWidth?: string | undefined;
+  minHeight?: string | undefined;
   help?: boolean | undefined;
   version?: boolean | undefined;
 }
@@ -88,6 +91,23 @@ OPTIONS:
   -c, --compress           Enable compression flag in header (optional)
                            Sets the compress bit in the RGB data header
 
+  -a, --align              Align the JPEG SOF (coded) size to the MCU grid (optional)
+                           JPEG always encodes in whole MCUs; this only controls
+                           whether the SOF marker reports the MCU-aligned size
+                           (420->16x16, 422->16x8, 444/400->8x8) or the exact size.
+                           The GUI header keeps the ORIGINAL input dimensions.
+                           Requires ffprobe (ships with FFmpeg) on PATH.
+
+  --min-width <pixels>     Minimum CONTENT width (optional)
+                           If the input is narrower, it is padded up to this width
+                           (raised to the MCU; never below the MCU). With -a the
+                           SOF is then MCU-rounded; without -a the SOF reports this
+                           exact width. The GUI header keeps the ORIGINAL width.
+                           Enables the padding path even without -a; needs ffprobe.
+
+  --min-height <pixels>    Minimum CONTENT height (optional)
+                           Vertical counterpart of --min-width.
+
   -h, --help               Display this help message
 
   -v, --version            Display version information
@@ -107,6 +127,12 @@ EXAMPLES:
 
   # Conversion with compression flag enabled
   image-to-jpeg -i input.png -o output.jpg -s 422 -q 5 -c
+
+  # Conversion with MCU alignment (JPEG SOF padded, GUI header keeps original size)
+  image-to-jpeg -i input.png -o output.jpg -s 420 -q 10 -a
+
+  # Pad a small image up to a minimum content size (e.g. 64x64)
+  image-to-jpeg -i icon.png -o icon.jpg -s 420 -q 10 --min-width 64 --min-height 64
 
 REQUIREMENTS:
   - FFmpeg must be installed and available in system PATH
@@ -129,7 +155,7 @@ https://github.com/your-repo/image-to-jpeg-converter
  * Displays version information.
  */
 function displayVersion(): void {
-  console.log('Image to JPEG Converter v1.0.0');
+  console.log('Image to JPEG Converter v1.3.0');
 }
 
 /**
@@ -178,6 +204,19 @@ function parseArgs(args: string[]): CliArgs {
       case '-c':
       case '--compress':
         parsed.compress = true;
+        break;
+
+      case '-a':
+      case '--align':
+        parsed.align = true;
+        break;
+
+      case '--min-width':
+        parsed.minWidth = args[++i];
+        break;
+
+      case '--min-height':
+        parsed.minHeight = args[++i];
         break;
 
       case '-h':
@@ -255,6 +294,27 @@ function validateArgs(args: CliArgs): string[] {
     }
   }
 
+  // Validate minimum coded dimensions if provided (positive integers)
+  const minWidth = args.minWidth;
+  if (minWidth !== undefined) {
+    const value = parseInt(minWidth, 10);
+    if (isNaN(value) || value < 1 || String(value) !== minWidth.trim()) {
+      errors.push(
+        `Invalid --min-width value: ${minWidth}. Must be a positive integer`
+      );
+    }
+  }
+
+  const minHeight = args.minHeight;
+  if (minHeight !== undefined) {
+    const value = parseInt(minHeight, 10);
+    if (isNaN(value) || value < 1 || String(value) !== minHeight.trim()) {
+      errors.push(
+        `Invalid --min-height value: ${minHeight}. Must be a positive integer`
+      );
+    }
+  }
+
   return errors;
 }
 
@@ -316,6 +376,11 @@ function displayResults(result: import('./types.js').ConversionResult): void {
   console.log(
     `  Dimensions: ${result.dimensions.width}x${result.dimensions.height} pixels`
   );
+  if (result.encodedDimensions) {
+    console.log(
+      `  Encoded (JPEG SOF): ${result.encodedDimensions.width}x${result.encodedDimensions.height} pixels`
+    );
+  }
   console.log('');
 }
 
@@ -421,6 +486,9 @@ async function main(): Promise<void> {
       ...(args.quality !== undefined && { quality: parseInt(args.quality, 10) }),
       resize: args.resize ? mapResizeOption(args.resize) : ResizeOption.None,
       compress: args.compress || false,
+      align: args.align || false,
+      ...(args.minWidth !== undefined && { minWidth: parseInt(args.minWidth, 10) }),
+      ...(args.minHeight !== undefined && { minHeight: parseInt(args.minHeight, 10) }),
     };
 
     // Display conversion parameters
@@ -436,6 +504,14 @@ async function main(): Promise<void> {
     }
     if (config.compress) {
       console.log(`  Compress: enabled`);
+    }
+    if (config.align) {
+      console.log(`  Align: enabled (JPEG SOF rounded up to the MCU grid)`);
+    }
+    if (config.minWidth !== undefined || config.minHeight !== undefined) {
+      console.log(
+        `  Min content size: ${config.minWidth ?? 'MCU'} x ${config.minHeight ?? 'MCU'}`
+      );
     }
 
     // Perform conversion

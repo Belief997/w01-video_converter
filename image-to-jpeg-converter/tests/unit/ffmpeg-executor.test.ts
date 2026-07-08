@@ -177,6 +177,97 @@ describe('FFmpegExecutor', () => {
     });
   });
 
+  describe('buildCommand - MCU alignment (pad filter)', () => {
+    it('adds no pad filter when alignTo is omitted (standard branch)', () => {
+      const config: ConversionConfig = {
+        inputPath: '/path/to/input.bmp', // non-transparent → -vf branch
+        outputPath: '/path/to/output.jpg',
+        samplingFactor: SamplingFactor.YUV420,
+        quality: 10,
+      };
+
+      const command = executor.buildCommand(config, '/tmp/output.jpg');
+
+      expect(command).not.toContain('-vf');
+      expect(command.join(' ')).not.toContain('pad=');
+    });
+
+    it('adds a -vf pad filter for non-transparent input when alignTo is set', () => {
+      const config: ConversionConfig = {
+        inputPath: '/path/to/input.bmp', // non-transparent → -vf branch
+        outputPath: '/path/to/output.jpg',
+        samplingFactor: SamplingFactor.YUV420,
+        quality: 10,
+      };
+
+      const command = executor.buildCommand(config, '/tmp/output.jpg', {
+        width: 688,
+        height: 688,
+      });
+
+      expect(command).toContain('-vf');
+      const vfIndex = command.indexOf('-vf');
+      expect(command[vfIndex + 1]).toBe('pad=688:688:0:0:black');
+      // Pad must come before the pixel format / quality args.
+      expect(vfIndex).toBeLessThan(command.indexOf('-pix_fmt'));
+    });
+
+    it('chains the pad filter into filter_complex for transparent input', () => {
+      const config: ConversionConfig = {
+        inputPath: '/path/to/input.png', // transparent → filter_complex branch
+        outputPath: '/path/to/output.jpg',
+        samplingFactor: SamplingFactor.YUV420,
+        quality: 10,
+      };
+
+      const command = executor.buildCommand(config, '/tmp/output.jpg', {
+        width: 688,
+        height: 688,
+      });
+
+      const fcIndex = command.indexOf('-filter_complex');
+      expect(fcIndex).toBeGreaterThan(-1);
+      const filter = command[fcIndex + 1];
+      expect(filter).toContain('overlay=format=auto');
+      expect(filter).toContain('pad=688:688:0:0:black[out]');
+      // The padded output must be mapped explicitly.
+      expect(command).toContain('-map');
+      expect(command[command.indexOf('-map') + 1]).toBe('[out]');
+    });
+
+    it('does not map [out] for transparent input when alignTo is omitted', () => {
+      const config: ConversionConfig = {
+        inputPath: '/path/to/input.png',
+        outputPath: '/path/to/output.jpg',
+        samplingFactor: SamplingFactor.YUV420,
+        quality: 10,
+      };
+
+      const command = executor.buildCommand(config, '/tmp/output.jpg');
+
+      expect(command).not.toContain('-map');
+      expect(command.join(' ')).not.toContain('pad=');
+    });
+
+    it('uses per-factor MCU dimensions passed by the caller', () => {
+      // The executor pads to exactly what it is told; here 422 → 16×8 grid.
+      const config: ConversionConfig = {
+        inputPath: '/path/to/input.bmp',
+        outputPath: '/path/to/output.jpg',
+        samplingFactor: SamplingFactor.YUV422,
+        quality: 10,
+      };
+
+      const command = executor.buildCommand(config, '/tmp/output.jpg', {
+        width: 112,
+        height: 56,
+      });
+
+      const vfIndex = command.indexOf('-vf');
+      expect(command[vfIndex + 1]).toBe('pad=112:56:0:0:black');
+    });
+  });
+
   describe('convert - command construction validation', () => {
     it('should construct correct command for each sampling factor', () => {
       const testCases = [

@@ -109,6 +109,39 @@ export { SamplingFactor, ResizeOption } from './types.js';
  * 
  * @example
  * ```typescript
+ * // MCU alignment: the JPEG SOF marker reports the padded (aligned) size,
+ * // while the GUI header keeps the ORIGINAL input dimensions. Useful for
+ * // hardware decoders that require MCU-aligned dimensions.
+ * const result = await convertToJpeg({
+ *   inputPath: 'photo.png',    // e.g. 686x686
+ *   outputPath: 'photo.jpg',
+ *   samplingFactor: SamplingFactor.YUV420,
+ *   quality: 10,
+ *   align: true
+ * });
+ * console.log(result.dimensions);        // { width: 686, height: 686 } (GUI header)
+ * console.log(result.encodedDimensions); // { width: 688, height: 688 } (JPEG SOF)
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Minimum coded size: pad a small image up so the JPEG SOF is at least
+ * // 64x64. The GUI header still reports the original size. minWidth/minHeight
+ * // enable padding on their own (no `align` needed) and are raised to the MCU.
+ * const result = await convertToJpeg({
+ *   inputPath: 'icon.png',     // e.g. 40x40
+ *   outputPath: 'icon.jpg',
+ *   samplingFactor: SamplingFactor.YUV420,
+ *   quality: 10,
+ *   minWidth: 64,
+ *   minHeight: 64
+ * });
+ * console.log(result.dimensions);        // { width: 40, height: 40 } (GUI header)
+ * console.log(result.encodedDimensions); // { width: 64, height: 64 } (JPEG SOF)
+ * ```
+ *
+ * @example
+ * ```typescript
  * // Error handling
  * try {
  *   const result = await convertToJpeg({

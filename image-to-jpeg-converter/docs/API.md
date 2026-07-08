@@ -101,8 +101,32 @@ interface ConversionConfig {
   
   /** Background color for transparent images (default: 'black') */
   backgroundColor?: string;
+
+  /** Round the JPEG SOF (coded) width/height up to the MCU grid (default: false).
+   *  JPEG is always physically encoded in MCU units; this flag only controls whether
+   *  the SOF marker reports the MCU-aligned size (true) or the exact content size
+   *  (false, may be non-MCU). The GUI header always keeps the original size. Needs ffprobe. */
+  align?: boolean;
+
+  /** Minimum CONTENT width. If the source is narrower, it is padded (black) on the RIGHT
+   *  up to this floor. The floor is never below one MCU. Whether it is then rounded up to
+   *  the MCU grid is decided by `align`. Setting it triggers padding; needs ffprobe. */
+  minWidth?: number;
+
+  /** Minimum CONTENT height. If the source is shorter, it is padded (black) on the BOTTOM
+   *  up to this floor. The floor is never below one MCU. Whether it is then rounded up to
+   *  the MCU grid is decided by `align`. Setting it triggers padding; needs ffprobe. */
+  minHeight?: number;
 }
 ```
+
+> **`align` / `min` semantics.** Physical JPEG encoding is always MCU-based (the encoder pads
+> the last partial MCU, the decoder crops it). For each dimension:
+> `content = max(original, min_floor)` where `min_floor = max(providedMin ?? MCU, MCU)`;
+> the SOF (JPEG header) size = `align ? roundUpToMCU(content) : content`.
+> The GUI header (`gui_rgb_data_head_t`) always reports the **original** input size with all
+> bit fields (including `align`) forced to 0 (spec_v4). See the README "MCU 对齐" /
+> "最小尺寸 padding" sections and the `align × min` behavior table for worked examples.
 
 ### ConversionResult
 
@@ -119,8 +143,16 @@ interface ConversionResult {
   /** Size of JPEG data in bytes */
   jpegSize: number;
   
-  /** Image dimensions */
+  /** Image dimensions (logical/original size, matches the GUI header) */
   dimensions: {
+    width: number;
+    height: number;
+  };
+
+  /** Encoded dimensions reported in the JPEG SOF marker: the MCU-aligned size when
+   *  `align` was on, or the exact content size (possibly non-MCU) when only `min` padding
+   *  applied. Present only when this size differs from the original. */
+  encodedDimensions?: {
     width: number;
     height: number;
   };

@@ -474,6 +474,121 @@ describe('InputValidator', () => {
     });
   });
 
+  describe('validateMinDimension', () => {
+    it('should accept a positive integer minWidth/minHeight', () => {
+      const config: ConversionConfig = {
+        inputPath: testInputFile,
+        outputPath: path.join(tempDir, 'output.jpg'),
+        samplingFactor: SamplingFactor.YUV420,
+        minWidth: 64,
+        minHeight: 64,
+      };
+
+      const result = validator.validate(config);
+
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept undefined minWidth/minHeight (optional)', () => {
+      const config: ConversionConfig = {
+        inputPath: testInputFile,
+        outputPath: path.join(tempDir, 'output.jpg'),
+        samplingFactor: SamplingFactor.YUV420,
+        // min dimensions omitted
+      };
+
+      const result = validator.validate(config);
+
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept a sub-MCU minimum (clamped at encode time, not rejected)', () => {
+      const config: ConversionConfig = {
+        inputPath: testInputFile,
+        outputPath: path.join(tempDir, 'output.jpg'),
+        samplingFactor: SamplingFactor.YUV420,
+        minWidth: 8, // below the 16 MCU — allowed, raised to MCU when encoding
+        minHeight: 8,
+      };
+
+      const result = validator.validate(config);
+
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject a zero minWidth', () => {
+      const config: ConversionConfig = {
+        inputPath: testInputFile,
+        outputPath: path.join(tempDir, 'output.jpg'),
+        samplingFactor: SamplingFactor.YUV420,
+        minWidth: 0,
+      };
+
+      const result = validator.validate(config);
+
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        const error = result.errors.find(e => e.field === 'minWidth');
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('positive');
+      }
+    });
+
+    it('should reject a negative minHeight', () => {
+      const config: ConversionConfig = {
+        inputPath: testInputFile,
+        outputPath: path.join(tempDir, 'output.jpg'),
+        samplingFactor: SamplingFactor.YUV420,
+        minHeight: -16,
+      };
+
+      const result = validator.validate(config);
+
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        const error = result.errors.find(e => e.field === 'minHeight');
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('positive');
+      }
+    });
+
+    it('should reject a non-integer minWidth', () => {
+      const config: ConversionConfig = {
+        inputPath: testInputFile,
+        outputPath: path.join(tempDir, 'output.jpg'),
+        samplingFactor: SamplingFactor.YUV420,
+        minWidth: 64.5,
+      };
+
+      const result = validator.validate(config);
+
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        const error = result.errors.find(e => e.field === 'minWidth');
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('integer');
+      }
+    });
+
+    it('should reject a NaN minHeight', () => {
+      const config: ConversionConfig = {
+        inputPath: testInputFile,
+        outputPath: path.join(tempDir, 'output.jpg'),
+        samplingFactor: SamplingFactor.YUV420,
+        minHeight: NaN,
+      };
+
+      const result = validator.validate(config);
+
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        const error = result.errors.find(e => e.field === 'minHeight');
+        expect(error).toBeDefined();
+        expect(error?.message).toContain('number');
+      }
+    });
+  });
+
   describe('error aggregation', () => {
     it('should report all validation errors together', () => {
       const config: ConversionConfig = {
